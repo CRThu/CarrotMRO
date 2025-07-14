@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -79,8 +80,35 @@ namespace CarrotMRO
 
         private void CurrentItemsAutosave()
         {
-            var autoSaveExcelFilePath = Path.Combine(ProjectPath, "autosave.xlsx");
-            ExcelHelper.WriteToExcel(UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveWriteFactory);
+            try
+            {
+                var autoSaveExcelFilePath = Path.Combine(ProjectPath, "autosave.xlsx");
+                ExcelHelper.WriteToExcel(UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveWriteFactory);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
+        }
+
+        [RelayCommand]
+        public void OpenProjectFolder()
+        {
+            try
+            {
+                OpenFolderDialog openFolderDialog = new OpenFolderDialog()
+                {
+                    FolderName = ProjectPath
+                };
+                if (openFolderDialog.ShowDialog() == true)
+                {
+                    ProjectPath = openFolderDialog.FolderName;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
         }
 
         [RelayCommand]
@@ -126,23 +154,30 @@ namespace CarrotMRO
         [RelayCommand]
         public void AddItem()
         {
-            GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
-            if (matchItem != null)
+            try
             {
-                UserItems.Add(new GeneralItem()
+                GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
+                if (matchItem != null)
                 {
-                    Part = SelectedPart,
-                    Name = SelectedStandardItemName,
-                    CustomName = SelectedCustomItemName,
-                    Num = ItemNum,
-                    Description = ItemDesc,
-                    Unit = matchItem.Unit,
-                    PerPrice = matchItem.PerPrice,
-                });
+                    UserItems.Add(new GeneralItem()
+                    {
+                        Part = SelectedPart,
+                        Name = SelectedStandardItemName,
+                        CustomName = SelectedCustomItemName,
+                        Num = ItemNum,
+                        Description = ItemDesc,
+                        Unit = matchItem.Unit,
+                        PerPrice = matchItem.PerPrice,
+                    });
+                }
+                else
+                {
+                    MessageBox.Show("未选择列表中的标准项目");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                MessageBox.Show("未选择列表中的标准项目");
+                MessageBox.Show(ex.ToString());
             }
         }
 

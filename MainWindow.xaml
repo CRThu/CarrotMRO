@@ -11,11 +11,14 @@
     <Grid>
         <TabControl Margin="5">
             <TabItem Header="设置">
-                <Grid>
-                    <TextBlock Text="项目路径" Margin="10,24,0,0" HorizontalAlignment="Left" Width="109" Height="33" VerticalAlignment="Top"/>
-                    <TextBox Text="{Binding ProjectPath}" Margin="118,24,0,0" Height="33" VerticalAlignment="Top" HorizontalAlignment="Left" Width="458"/>
-                    <Button Content="导入" Command="{Binding LoadProjectCommand}" Width="80" Margin="595,25,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" Height="30"/>
-                </Grid>
+                <Grid Margin="10,10,10,10">
+                    <StackPanel Orientation="Horizontal" Height="60" VerticalAlignment="Top">
+                        <TextBlock Text="项目路径" Margin="10,0,10,0" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding ProjectPath}" Margin="10,0,10,0" Height="33" VerticalAlignment="Center" Width="400"/>
+                        <Button Content="浏览" Command="{Binding OpenProjectFolderCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
+                        <Button Content="导入" Command="{Binding LoadProjectCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
+                    </StackPanel>
+                    </Grid>
             </TabItem>
             <TabItem Header="模板">
                 <Grid>
