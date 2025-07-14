@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
@@ -47,6 +48,10 @@ namespace CarrotMRO
 
         [ObservableProperty]
         private GeneralItem? selectedUserItem;
+
+        [ObservableProperty]
+        private string versionText = $"CarrotMRO\r\nVer.{Assembly.GetExecutingAssembly().GetName().Version}";
+
 
         public MainViewModel()
         {

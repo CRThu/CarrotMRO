@@ -51,7 +51,7 @@
 
                     <DataGrid Grid.Column="1" ItemsSource="{Binding UserItems}" SelectedItem="{Binding SelectedUserItem}" Margin="0,0,0,90" AutoGenerateColumns="False" MinColumnWidth="80">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=OneWay}"/>
+                            <DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="自定项目" Binding="{Binding CustomName,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=OneWay}"/>
                             <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
@@ -70,7 +70,10 @@
                 </Grid>
             </TabItem>
             <TabItem Header="生成">
-                
+
+            </TabItem>
+            <TabItem Header="版本">
+                <TextBlock Text="{Binding VersionText}" FontSize="18" Margin="5,5,5,5" VerticalAlignment="Top" HorizontalAlignment="Left"/>
             </TabItem>
         </TabControl>
     </Grid>
