@@ -57,8 +57,7 @@ namespace CarrotMRO
         public MainViewModel()
         {
             // 更新datagrid直接编辑的元素值到autosave
-            UserItems.CollectionChanged += (s, e) =>
-            {
+            UserItems.CollectionChanged += (s, e) => {
                 if (e.NewItems != null && e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
                 {
                     foreach (GeneralItem item in e.NewItems)
@@ -91,13 +90,21 @@ namespace CarrotMRO
             }
         }
 
+        partial void OnSelectedStandardItemNameChanged(string value)
+        {
+            GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
+            if (matchItem != null)
+            {
+                ItemDesc = matchItem.Description;
+            }
+        }
+
         [RelayCommand]
         public void OpenProjectFolder()
         {
             try
             {
-                OpenFolderDialog openFolderDialog = new OpenFolderDialog()
-                {
+                OpenFolderDialog openFolderDialog = new OpenFolderDialog() {
                     FolderName = ProjectPath
                 };
                 if (openFolderDialog.ShowDialog() == true)
@@ -159,8 +166,7 @@ namespace CarrotMRO
                 GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
                 if (matchItem != null)
                 {
-                    UserItems.Add(new GeneralItem()
-                    {
+                    UserItems.Add(new GeneralItem() {
                         Part = SelectedPart,
                         Name = SelectedStandardItemName,
                         CustomName = SelectedCustomItemName,
