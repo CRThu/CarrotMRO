@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.Win32;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -208,6 +209,15 @@ namespace CarrotMRO
         {
             if (MessageBox.Show("确认删除所有条目?", "警告", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
                 UserItems.Clear();
+        }
+
+        [RelayCommand]
+        public void GenerateReport()
+        {
+            var groupedItems = UserItems.GroupBy(item => item.Part);
+
+            var outExcelFilePath = Path.Combine(ProjectPath, "out.xlsx");
+            ExcelHelper.WriteToExcel(groupedItems, outExcelFilePath, true, ExcelItemFactory.OutHeader, ExcelItemFactory.OutWriteFactory);
         }
     }
 }

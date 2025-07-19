@@ -29,7 +29,7 @@
                             <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
                             <DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
-                            <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                            <DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
@@ -57,7 +57,7 @@
                             <DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="自定项目" Binding="{Binding CustomName,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=OneWay}"/>
-                            <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                            <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=OneWay}"/>
                             <DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=OneWay}"/>
                             <DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>
@@ -73,7 +73,9 @@
                 </Grid>
             </TabItem>
             <TabItem Header="生成">
-
+                <Grid>
+                    <Button Content="生成" Command="{Binding GenerateReportCommand}" Width="100"/>
+                </Grid>
             </TabItem>
             <TabItem Header="版本">
                 <TextBlock Text="{Binding VersionText}" FontSize="18" Margin="5,5,5,5" VerticalAlignment="Top" HorizontalAlignment="Left"/>

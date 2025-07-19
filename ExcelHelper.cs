@@ -108,5 +108,60 @@ namespace CarrotMRO
                 throw new InvalidOperationException($"写入Excel文件时出错: {ex.Message}", ex);
             }
         }
+        public static bool WriteToExcel(IEnumerable<IGrouping<string, GeneralItem>> groupedItems, string filePath, bool overwrite, string[] header, Action<IXLWorksheet, int, GeneralItem> itemFactory)
+        {
+            if (groupedItems == null)
+            {
+                throw new ArgumentException();
+            }
+
+            // 检查文件是否存在且不允许覆盖
+            if (File.Exists(filePath) && !overwrite)
+            {
+                return false;
+            }
+
+            try
+            {
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("Report");
+
+                // 写入表头
+                for (int i = 0; i < header.Length; i++)
+                    worksheet.Cell(1, i + 1).Value = header[i];
+
+                // 写入数据
+                int row = 2; // 数据从第二行开始
+                foreach (var group in groupedItems)
+                {
+                    worksheet.Cell(row, 1).Value = group.Key;
+
+                    // 合并
+                    var rangeToMerge = worksheet.Range(row, 1, row, header.Length);
+                    rangeToMerge.Merge();
+                    rangeToMerge.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    rangeToMerge.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                    
+                    row++;
+
+                    foreach (var item in group)
+                    {
+                        itemFactory(worksheet, row, item);
+                        row++;
+                    }
+                }
+
+                // 自动调整列宽
+                //worksheet.Columns().AdjustToContents();
+
+                // 保存文件
+                workbook.SaveAs(filePath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"写入Excel文件时出错: {ex.Message}", ex);
+            }
+        }
     }
 }
