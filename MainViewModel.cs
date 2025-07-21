@@ -123,7 +123,7 @@ namespace CarrotMRO
             try
             {
                 OpenFolderDialog openFolderDialog = new OpenFolderDialog() {
-                    FolderName = ProjectPath
+                    InitialDirectory = ProjectPath,
                 };
                 if (openFolderDialog.ShowDialog() == true)
                 {
