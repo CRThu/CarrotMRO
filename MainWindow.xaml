@@ -18,7 +18,7 @@
                         <Button Content="浏览" Command="{Binding OpenProjectFolderCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
                         <Button Content="导入" Command="{Binding LoadProjectCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
                     </StackPanel>
-                    </Grid>
+                </Grid>
             </TabItem>
             <TabItem Header="模板">
                 <Grid>
@@ -40,33 +40,57 @@
                         <ColumnDefinition Width="1*"/>
                         <ColumnDefinition Width="2*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="类目" HorizontalAlignment="Left" Margin="34,28,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
-                    <hc:ComboBox Grid.Column="0" IsEditable="True" ItemsSource="{Binding Parts}" Text="{Binding SelectedPart,UpdateSourceTrigger=PropertyChanged}" Margin="93,21,0,0" HorizontalAlignment="Left" Width="261" Height="30" VerticalAlignment="Top"/>
-                    <TextBlock Grid.Column="0" Text="项目" HorizontalAlignment="Left" Margin="34,79,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
-                    <hc:AutoCompleteTextBox Grid.Column="0" ItemsSource="{Binding CustomItemNames}" Text="{Binding SelectedCustomItemName}" Width="258" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="93,72,0,0"/>
-                    <TextBlock Grid.Column="0" Text="标准项目" HorizontalAlignment="Left" Margin="34,131,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
-                    <hc:AutoCompleteTextBox Grid.Column="0" ItemsSource="{Binding StandardItems}" Text="{Binding SelectedStandardItemName}" DisplayMemberPath="Name" Width="258" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="96,124,0,0"/>
-                    <TextBlock Grid.Column="0" Text="数量" HorizontalAlignment="Left" Margin="34,178,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
-                    <TextBox Text="{Binding ItemNum}" Margin="96,170,0,0" Height="30" VerticalAlignment="Top" HorizontalAlignment="Left" Width="258"/>
-                    <TextBlock Grid.Column="0" Text="备注" HorizontalAlignment="Left" Margin="34,220,0,0" TextWrapping="Wrap" VerticalAlignment="Top"/>
-                    <TextBox Text="{Binding ItemDesc}" Margin="96,220,0,0" Height="30" VerticalAlignment="Top" HorizontalAlignment="Left" Width="258"/>
-                    <Button Content="添加条目" Command="{Binding AddItemCommand}" Height="41" Width="80" Margin="305,0,0,10" VerticalAlignment="Bottom" HorizontalAlignment="Left"/>
+                    <StackPanel Grid.Column="0" Orientation="Vertical" Margin="10,10,10,10">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="类目" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <hc:ComboBox Grid.Column="0" IsEditable="True" ItemsSource="{Binding Parts}" Text="{Binding SelectedPart,UpdateSourceTrigger=PropertyChanged}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="自定项目" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <hc:AutoCompleteTextBox ItemsSource="{Binding FilteredCustomItemNames}" Text="{Binding SelectedCustomItemName,UpdateSourceTrigger=PropertyChanged}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="标准项目" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <hc:AutoCompleteTextBox ItemsSource="{Binding FilteredStandardItemNames}" Text="{Binding SelectedStandardItemName,UpdateSourceTrigger=PropertyChanged}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="单位" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <TextBox Text="{Binding ItemUnit}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="单价" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <TextBox Text="{Binding ItemPerPrice}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="数量" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <TextBox Text="{Binding ItemNum}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="备注" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <TextBox Text="{Binding ItemDesc}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="验证" Command="{Binding ValidateNewItemCommand}" Margin="5,5,5,5" Width="50"/>
+                            <Button Content="添加" Command="{Binding AddNewItemCommand}" Margin="5,5,5,5" Width="50"/>
+                        </StackPanel>
+
+                    </StackPanel>
 
                     <DataGrid Grid.Column="1" ItemsSource="{Binding UserItems}" SelectedItem="{Binding SelectedUserItem}" Margin="0,0,0,90" AutoGenerateColumns="False" MinColumnWidth="80">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="自定项目" Binding="{Binding CustomName,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
-                            <DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=OneWay}"/>
-                            <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=OneWay}"/>
+                            <DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                            <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
-                            <DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=OneWay}"/>
+                            <DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                             <DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>
                             <DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Height="55">
-                        <Button Content="验证项目" Command="{Binding ValidateUserItemsCommand}" Margin="20,0,0,0" Width="100"/>
+                        <Button Content="验证" Command="{Binding ValidateUserItemsCommand}" Margin="20,0,0,0" Width="100"/>
                         <Button Content="删除所选项" Command="{Binding RemoveSelectedUserItemCommand}" Margin="20,0,0,0" Width="100"/>
                         <Button Content="删除所有" Command="{Binding ClearAllUserItemsCommand}" Margin="20,0,0,0" Width="100"/>
                     </StackPanel>

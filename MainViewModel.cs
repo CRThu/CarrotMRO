@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 
@@ -19,6 +20,7 @@ namespace CarrotMRO
         private string projectPath = Directory.GetCurrentDirectory();
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(FilteredStandardItemNames))]
         private ObservableCollection<GeneralItem> standardItems = new ObservableCollection<GeneralItem>();
 
         [ObservableProperty]
@@ -31,13 +33,26 @@ namespace CarrotMRO
         private string selectedPart = "<默认类目>";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(FilteredCustomItemNames))]
         private ObservableCollection<string> customItemNames = new ObservableCollection<string>();
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(FilteredCustomItemNames))]
         private string selectedCustomItemName = "<项目1>";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(FilteredStandardItemNames))]
         private string selectedStandardItemName = "";
+
+        public IEnumerable<string> FilteredCustomItemNames => CustomItemNames.Where(item => item.Contains(SelectedCustomItemName, StringComparison.CurrentCultureIgnoreCase));
+
+        public IEnumerable<string> FilteredStandardItemNames => StandardItems.Select(i => i.Name).Where(item => item.Contains(SelectedStandardItemName, StringComparison.CurrentCultureIgnoreCase));
+
+        [ObservableProperty]
+        private string itemUnit = "";
+
+        [ObservableProperty]
+        private double itemPerPrice = 1;
 
         [ObservableProperty]
         private double itemNum = 1;
@@ -96,6 +111,8 @@ namespace CarrotMRO
             GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
             if (matchItem != null)
             {
+                ItemPerPrice = matchItem.PerPrice;
+                ItemUnit = matchItem.Unit;
                 ItemDesc = matchItem.Description;
             }
         }
@@ -160,27 +177,50 @@ namespace CarrotMRO
 
 
         [RelayCommand]
-        public void AddItem()
+        public void ValidateNewItem()
         {
             try
             {
                 GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
-                if (matchItem != null)
+                if (matchItem == null)
                 {
-                    UserItems.Add(new GeneralItem() {
-                        Part = SelectedPart,
-                        Name = SelectedStandardItemName,
-                        CustomName = SelectedCustomItemName,
-                        Num = ItemNum,
-                        Description = ItemDesc,
-                        Unit = matchItem.Unit,
-                        PerPrice = matchItem.PerPrice,
-                    });
+                    MessageBox.Show("未匹配到标准项目");
+                    return;
                 }
-                else
+                if (ItemUnit != matchItem.Unit)
                 {
-                    MessageBox.Show("未选择列表中的标准项目");
+                    MessageBox.Show($"当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
+                    return;
                 }
+                if (ItemPerPrice != matchItem.PerPrice)
+                {
+                    MessageBox.Show($"当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
+        }
+
+        [RelayCommand]
+        public void AddNewItem()
+        {
+            try
+            {
+                UserItems.Add(new GeneralItem() {
+                    Part = SelectedPart,
+                    Name = SelectedStandardItemName,
+                    CustomName = SelectedCustomItemName,
+                    Num = ItemNum,
+                    Description = ItemDesc,
+                    Unit = ItemUnit,
+                    PerPrice = ItemPerPrice,
+                });
+
+                if (!CustomItemNames.Contains(SelectedCustomItemName))
+                    CustomItemNames.Add(SelectedCustomItemName);
             }
             catch (Exception ex)
             {
@@ -192,7 +232,35 @@ namespace CarrotMRO
         [RelayCommand]
         public void ValidateUserItems()
         {
-            // TODO
+            StringBuilder stringBuilder = new StringBuilder();
+            foreach (var item in UserItems)
+            {
+                GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == item.Name);
+                if (matchItem == null)
+                {
+                    stringBuilder.AppendLine($"项目({item.Name}):未匹配到标准项目");
+                }
+                else
+                {
+                    if (item.Unit != matchItem.Unit)
+                    {
+                        stringBuilder.AppendLine($"项目({item.Name}):当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
+                    }
+                    if (item.PerPrice != matchItem.PerPrice)
+                    {
+                        stringBuilder.AppendLine($"项目({item.Name}):当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
+                    }
+                }
+            }
+
+            if (stringBuilder.Length > 0)
+            {
+                MessageBox.Show(stringBuilder.ToString());
+            }
+            else
+            {
+                MessageBox.Show("验证未发现问题");
+            }
         }
 
         [RelayCommand]
