@@ -19,7 +19,7 @@ namespace CarrotMRO
         private AppConfig _appConfig;
 
         [ObservableProperty]
-        private string projectPath = Directory.GetCurrentDirectory();
+        private string projectDirectory = Directory.GetCurrentDirectory();
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(FilteredStandardItemNames))]
@@ -99,7 +99,7 @@ namespace CarrotMRO
         {
             try
             {
-                var autoSaveExcelFilePath = Path.Combine(ProjectPath, "autosave.xlsx");
+                var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
                 ExcelHelper.WriteToExcel(UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveWriteFactory);
             }
             catch (Exception ex)
@@ -125,12 +125,16 @@ namespace CarrotMRO
             try
             {
                 OpenFileDialog ofd = new OpenFileDialog() {
-                    InitialDirectory = ProjectPath,
+                    InitialDirectory = ProjectDirectory,
+                    Filter = "YAML 文件|*.yaml;*.yml|所有文件|*.*",
                     DefaultExt = "yaml"
                 };
                 if (ofd.ShowDialog() == true)
                 {
-                    ProjectPath = ofd.FileName;
+                    ProjectDirectory = Path.GetDirectoryName(ofd.FileName)!;
+
+                    // 读取工程配置
+                    _appConfig = ConfigLoader.LoadFromFile(ofd.FileName);
                 }
             }
             catch (Exception ex)
@@ -144,11 +148,8 @@ namespace CarrotMRO
         {
             try
             {
-                // 读取工程配置
-                _appConfig = ConfigLoader.LoadFromFile(ProjectPath);
-
                 // 读取标准模板
-                var standardExcelFilePath = Path.Combine(ProjectPath, "standard.xlsx");
+                var standardExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Standard.FileName);
                 if (File.Exists(standardExcelFilePath))
                 {
                     var standardItemsFromExcel = ExcelHelper.ReadFromExcel(standardExcelFilePath, ExcelItemFactory.StandardReadFactory);
@@ -164,7 +165,7 @@ namespace CarrotMRO
                 }
 
                 // 读取软件自动保存记录
-                var autoSaveExcelFilePath = Path.Combine(ProjectPath, "autosave.xlsx");
+                var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
                 if (File.Exists(autoSaveExcelFilePath))
                 {
                     var autosaveItemsFromExcel = ExcelHelper.ReadFromExcel(autoSaveExcelFilePath, ExcelItemFactory.AutosaveReadFactory);
@@ -290,7 +291,7 @@ namespace CarrotMRO
         {
             var groupedItems = UserItems.GroupBy(item => item.Part);
 
-            var outExcelFilePath = Path.Combine(ProjectPath, "out.xlsx");
+            var outExcelFilePath = Path.Combine(ProjectDirectory, "out.xlsx");
             ExcelHelper.WriteToExcel(groupedItems, outExcelFilePath, true, ExcelItemFactory.OutHeader, ExcelItemFactory.OutWriteFactory);
         }
     }

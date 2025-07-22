@@ -19,6 +19,9 @@ namespace CarrotMRO
 
         [YamlMember(Alias = "standard")]
         public StandardConfig Standard { get; set; }
+
+        [YamlMember(Alias = "autosave")]
+        public AutosaveConfig Autosave { get; set; }
     }
 
     public class StandardConfig
@@ -30,8 +33,23 @@ namespace CarrotMRO
         public HeaderConfig Header { get; set; }
     }
 
+    public class AutosaveConfig
+    {
+        [YamlMember(Alias = "name")]
+        public string FileName { get; set; }
+
+        [YamlMember(Alias = "header")]
+        public HeaderConfig Header { get; set; }
+    }
+
     public class HeaderConfig
     {
+        [YamlMember(Alias = "part")]
+        public int? PartColumn { get; set; }
+
+        [YamlMember(Alias = "customName")]
+        public int? CustomNameColumn { get; set; }
+
         [YamlMember(Alias = "name")]
         public int? NameColumn { get; set; }
 

@@ -3,7 +3,20 @@ version: 1
 standard:
   name: standard.xlsx
   header:
+    part: 
+    customName: 
     name: 1
     unit: 2
+    num: 
     perPrice: 4
     desc: 5
+autosave:
+  name: autosave.xlsx
+  header:
+    part: 1
+    customName: 2
+    name: 3
+    unit: 4
+    num: 5
+    perPrice: 6
+    desc: 7
