@@ -1,0 +1,9 @@
+app: CarrotMRO
+version: 1
+standard:
+  name: standard.xlsx
+  header:
+    name: 1
+    unit: 2
+    perPrice: 4
+    desc: 5

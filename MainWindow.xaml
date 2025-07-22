@@ -15,7 +15,7 @@
                     <StackPanel Orientation="Horizontal" Height="60" VerticalAlignment="Top">
                         <TextBlock Text="项目路径" Margin="10,0,10,0" VerticalAlignment="Center"/>
                         <TextBox Text="{Binding ProjectPath}" Margin="10,0,10,0" Height="33" VerticalAlignment="Center" Width="400"/>
-                        <Button Content="浏览" Command="{Binding OpenProjectFolderCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
+                        <Button Content="浏览" Command="{Binding BrowseProjectCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
                         <Button Content="导入" Command="{Binding LoadProjectCommand}" Margin="10,0,10,0" VerticalAlignment="Center" Width="80" Height="30"/>
                     </StackPanel>
                 </Grid>

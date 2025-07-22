@@ -16,6 +16,8 @@ namespace CarrotMRO
 {
     public partial class MainViewModel : ObservableObject
     {
+        private AppConfig _appConfig;
+
         [ObservableProperty]
         private string projectPath = Directory.GetCurrentDirectory();
 
@@ -118,16 +120,17 @@ namespace CarrotMRO
         }
 
         [RelayCommand]
-        public void OpenProjectFolder()
+        public void BrowseProject()
         {
             try
             {
-                OpenFolderDialog openFolderDialog = new OpenFolderDialog() {
+                OpenFileDialog ofd = new OpenFileDialog() {
                     InitialDirectory = ProjectPath,
+                    DefaultExt = "yaml"
                 };
-                if (openFolderDialog.ShowDialog() == true)
+                if (ofd.ShowDialog() == true)
                 {
-                    ProjectPath = openFolderDialog.FolderName;
+                    ProjectPath = ofd.FileName;
                 }
             }
             catch (Exception ex)
@@ -141,6 +144,9 @@ namespace CarrotMRO
         {
             try
             {
+                // 读取工程配置
+                _appConfig = ConfigLoader.LoadFromFile(ProjectPath);
+
                 // 读取标准模板
                 var standardExcelFilePath = Path.Combine(ProjectPath, "standard.xlsx");
                 if (File.Exists(standardExcelFilePath))
