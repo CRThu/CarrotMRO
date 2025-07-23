@@ -22,11 +22,15 @@ namespace CarrotMRO
         private string projectDirectory = Directory.GetCurrentDirectory();
 
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(FilteredStandardItemNames))]
-        private ObservableCollection<GeneralItem> standardItems = new ObservableCollection<GeneralItem>();
+        private ObservableCollection<DataGridColumnDefinition> standardDataGridColumns;
 
         [ObservableProperty]
-        private ObservableCollection<DataGridColumnDefinition> standardDataGridcolumns;
+        private ObservableCollection<DataGridColumnDefinition> quotationDataGridColumns;
+
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(FilteredStandardItemNames))]
+        private ObservableCollection<GeneralItem> standardItems = new ObservableCollection<GeneralItem>();
 
         [ObservableProperty]
         private ObservableCollection<string> parts = new ObservableCollection<string>()
@@ -103,7 +107,7 @@ namespace CarrotMRO
             try
             {
                 var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
-                ExcelHelper.WriteToExcel(UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveWriteFactory);
+                ExcelHelper.WriteToExcel(_appConfig, UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveItemWrite);
             }
             catch (Exception ex)
             {
@@ -116,9 +120,14 @@ namespace CarrotMRO
             GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
             if (matchItem != null)
             {
-                ItemPerPrice = matchItem.PerPrice;
-                ItemUnit = matchItem.Unit;
-                ItemDesc = matchItem.Description;
+                if (_appConfig.Match.Unit)
+                    ItemUnit = matchItem.Unit;
+                if (_appConfig.Match.Num)
+                    ItemNum = matchItem.Num;
+                if (_appConfig.Match.PerPrice)
+                    ItemPerPrice = matchItem.PerPrice;
+                if (_appConfig.Match.Desc)
+                    ItemDesc = matchItem.Description;
             }
         }
 
@@ -139,8 +148,9 @@ namespace CarrotMRO
                     // 读取工程配置
                     _appConfig = ConfigLoader.LoadFromFile(ofd.FileName);
 
-                    // 更新模板列
-                    StandardDataGridcolumns = new ObservableCollection<DataGridColumnDefinition>(_appConfig.Standard.Header.BuildColumns());
+                    // 更新DataGrid列
+                    StandardDataGridColumns = new ObservableCollection<DataGridColumnDefinition>(_appConfig.Standard.Header.BuildColumns());
+                    QuotationDataGridColumns = new ObservableCollection<DataGridColumnDefinition>(_appConfig.Quotation.Header.BuildColumns());
                 }
             }
             catch (Exception ex)
@@ -158,7 +168,7 @@ namespace CarrotMRO
                 var standardExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Standard.FileName);
                 if (File.Exists(standardExcelFilePath))
                 {
-                    var standardItemsFromExcel = ExcelHelper.ReadFromExcel(standardExcelFilePath, ExcelItemFactory.StandardReadFactory);
+                    var standardItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig, standardExcelFilePath, ExcelItemFactory.StandardItemRead);
                     StandardItems.Clear();
                     for (int i = 0; i < standardItemsFromExcel.Count; i++)
                     {
@@ -174,7 +184,7 @@ namespace CarrotMRO
                 var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
                 if (File.Exists(autoSaveExcelFilePath))
                 {
-                    var autosaveItemsFromExcel = ExcelHelper.ReadFromExcel(autoSaveExcelFilePath, ExcelItemFactory.AutosaveReadFactory);
+                    var autosaveItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig, autoSaveExcelFilePath, ExcelItemFactory.AutosaveItemRead);
                     UserItems.Clear();
                     for (int i = 0; i < autosaveItemsFromExcel.Count; i++)
                     {
@@ -200,12 +210,12 @@ namespace CarrotMRO
                     MessageBox.Show("未匹配到标准项目");
                     return;
                 }
-                if (ItemUnit != matchItem.Unit)
+                if (_appConfig.Validate.Unit && ItemUnit != matchItem.Unit)
                 {
                     MessageBox.Show($"当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
                     return;
                 }
-                if (ItemPerPrice != matchItem.PerPrice)
+                if (_appConfig.Validate.PerPrice && ItemPerPrice != matchItem.PerPrice)
                 {
                     MessageBox.Show($"当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
                     return;
@@ -255,11 +265,11 @@ namespace CarrotMRO
                 }
                 else
                 {
-                    if (item.Unit != matchItem.Unit)
+                    if (_appConfig.Validate.Unit && item.Unit != matchItem.Unit)
                     {
                         stringBuilder.AppendLine($"项目({item.Name}):当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
                     }
-                    if (item.PerPrice != matchItem.PerPrice)
+                    if (_appConfig.Validate.PerPrice && item.PerPrice != matchItem.PerPrice)
                     {
                         stringBuilder.AppendLine($"项目({item.Name}):当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
                     }
@@ -295,10 +305,28 @@ namespace CarrotMRO
         [RelayCommand]
         public void GenerateReport()
         {
-            var groupedItems = UserItems.GroupBy(item => item.Part);
+            SaveFileDialog sfd = new SaveFileDialog() {
+                Title = "保存Excel文件",
+                Filter = "Excel文件 (*.xlsx)|*.xlsx|所有文件 (*.*)|*.*",
+                DefaultExt = ".xlsx",
+                FileName = $"{DateTime.Now:yyyyMMdd}-报价单.xlsx",
+                InitialDirectory = ProjectDirectory,
+                OverwritePrompt = true
+            };
 
-            var outExcelFilePath = Path.Combine(ProjectDirectory, "out.xlsx");
-            ExcelHelper.WriteToExcel(groupedItems, outExcelFilePath, true, ExcelItemFactory.OutHeader, ExcelItemFactory.OutWriteFactory);
+            if (sfd.ShowDialog() == true)
+            {
+                if (_appConfig.Quotation.Group)
+                {
+                    var groupedItems = UserItems.GroupBy(item => item.Part);
+                    var headers = _appConfig.Quotation.Header.GetFullHeaders();
+                    ExcelHelper.WriteToExcel(_appConfig, groupedItems, sfd.FileName, true, headers, ExcelItemFactory.QuotationItemWrite);
+                }
+                else
+                {
+                    MessageBox.Show("尚未支持");
+                }
+            }
         }
     }
 }

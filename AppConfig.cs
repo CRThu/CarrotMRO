@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Data;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -20,14 +21,33 @@ namespace CarrotMRO
         [YamlMember(Alias = "standard")]
         public StandardConfig Standard { get; set; }
 
+        [YamlMember(Alias = "quotation")]
+        public QuotationConfig Quotation { get; set; }
+
         [YamlMember(Alias = "autosave")]
         public AutosaveConfig Autosave { get; set; }
+
+        [YamlMember(Alias = "match")]
+        public MatchConfig Match { get; set; }
+
+        [YamlMember(Alias = "validate")]
+        public ValidateConfig Validate { get; set; }
+
     }
 
     public class StandardConfig
     {
         [YamlMember(Alias = "name")]
         public string FileName { get; set; }
+
+        [YamlMember(Alias = "header")]
+        public HeaderConfig Header { get; set; }
+    }
+
+    public class QuotationConfig
+    {
+        [YamlMember(Alias = "group")]
+        public bool Group { get; set; }
 
         [YamlMember(Alias = "header")]
         public HeaderConfig Header { get; set; }
@@ -62,6 +82,9 @@ namespace CarrotMRO
         [YamlMember(Alias = "perPrice")]
         public int? PerPriceColumn { get; set; }
 
+        [YamlMember(Alias = "sumPrice")]
+        public int? SumPriceColumn { get; set; }
+
         [YamlMember(Alias = "desc")]
         public int? DescColumn { get; set; }
 
@@ -88,12 +111,88 @@ namespace CarrotMRO
             if (PerPriceColumn.HasValue)
                 columns.Add(new() { Header = "单价", BindingPath = "PerPrice" });
 
+            if (SumPriceColumn.HasValue)
+                columns.Add(new() { Header = "总价", BindingPath = "SumPrice", BindingMode = BindingMode.OneWay });
+
             if (DescColumn.HasValue)
                 columns.Add(new() { Header = "备注", BindingPath = "Description" });
 
             return columns;
         }
+
+        // 列名映射字典
+        private static readonly Dictionary<string, string> _headerTexts = new() {
+            [nameof(PartColumn)] = "类目",
+            [nameof(CustomNameColumn)] = "自定项目",
+            [nameof(NameColumn)] = "标准项目",
+            [nameof(UnitColumn)] = "单位",
+            [nameof(NumColumn)] = "数量",
+            [nameof(PerPriceColumn)] = "单价",
+            [nameof(SumPriceColumn)] = "总价",
+            [nameof(DescColumn)] = "备注"
+        };
+
+        // 获取所有已配置的列（带列号）
+        public Dictionary<int, string> GetHeaderMapping()
+        {
+            var mapping = new Dictionary<int, string>();
+            var properties = GetType().GetProperties()
+                .Where(p => p.Name.EndsWith("Column") && p.PropertyType == typeof(int?));
+
+            foreach (var prop in properties)
+            {
+                var value = (int?)prop.GetValue(this);
+                if (value.HasValue && _headerTexts.TryGetValue(prop.Name, out var headerText))
+                {
+                    mapping[value.Value] = headerText;
+                }
+            }
+            return mapping;
+        }
+
+        // 生成完整表头数组（保留空位）
+        public string[] GetFullHeaders()
+        {
+            var mapping = GetHeaderMapping();
+            if (mapping.Count == 0) return Array.Empty<string>();
+
+            int maxColumn = mapping.Keys.Max();
+            var headers = new string[maxColumn];
+
+            foreach (var kvp in mapping)
+            {
+                if (kvp.Key > 0)
+                    headers[kvp.Key - 1] = kvp.Value; // 列号转为0-based索引
+            }
+
+            return headers;
+        }
     }
+
+    public class MatchConfig
+    {
+        [YamlMember(Alias = "unit")]
+        public bool Unit { get; set; }
+
+        [YamlMember(Alias = "num")]
+        public bool Num { get; set; }
+
+        [YamlMember(Alias = "perPrice")]
+        public bool PerPrice { get; set; }
+
+        [YamlMember(Alias = "desc")]
+        public bool Desc { get; set; }
+    }
+
+    public class ValidateConfig
+    {
+        [YamlMember(Alias = "unit")]
+        public bool Unit { get; set; }
+
+        [YamlMember(Alias = "perPrice")]
+        public bool PerPrice { get; set; }
+    }
+
 
     public static class ConfigLoader
     {

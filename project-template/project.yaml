@@ -9,7 +9,21 @@ standard:
     unit: 2
     num: 
     perPrice: 4
+    sumPrice: 
     desc: 5
+
+quotation:
+  group: true
+  header:
+    part: 0 # only display on ui
+    customName: 
+    name: 2
+    unit: 3
+    num: 4
+    perPrice: 5
+    sumPrice: 6
+    desc: 7
+
 autosave:
   name: autosave.xlsx
   header:
@@ -19,4 +33,15 @@ autosave:
     unit: 4
     num: 5
     perPrice: 6
+    sumPrice: 
     desc: 7
+
+match:
+  unit: true
+  num: false
+  perPrice: true
+  desc: true
+
+validate:
+  unit: true
+  perPrice: true
