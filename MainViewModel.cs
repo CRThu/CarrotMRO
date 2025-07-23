@@ -26,6 +26,9 @@ namespace CarrotMRO
         private ObservableCollection<GeneralItem> standardItems = new ObservableCollection<GeneralItem>();
 
         [ObservableProperty]
+        private ObservableCollection<DataGridColumnDefinition> standardDataGridcolumns;
+
+        [ObservableProperty]
         private ObservableCollection<string> parts = new ObservableCollection<string>()
         {
             "<默认类目>",
@@ -135,6 +138,9 @@ namespace CarrotMRO
 
                     // 读取工程配置
                     _appConfig = ConfigLoader.LoadFromFile(ofd.FileName);
+
+                    // 更新模板列
+                    StandardDataGridcolumns = new ObservableCollection<DataGridColumnDefinition>(_appConfig.Standard.Header.BuildColumns());
                 }
             }
             catch (Exception ex)

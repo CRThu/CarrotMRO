@@ -64,6 +64,35 @@ namespace CarrotMRO
 
         [YamlMember(Alias = "desc")]
         public int? DescColumn { get; set; }
+
+        public List<DataGridColumnDefinition> BuildColumns()
+        {
+            var columns = new List<DataGridColumnDefinition>();
+
+            // 直接逐个字段检查并映射
+            if (PartColumn.HasValue)
+                columns.Add(new() { Header = "类目", BindingPath = "Part" });
+
+            if (CustomNameColumn.HasValue)
+                columns.Add(new() { Header = "自定项目", BindingPath = "CustomName" });
+
+            if (NameColumn.HasValue)
+                columns.Add(new() { Header = "标准项目", BindingPath = "Name" });
+
+            if (UnitColumn.HasValue)
+                columns.Add(new() { Header = "单位", BindingPath = "Unit" });
+
+            if (NumColumn.HasValue)
+                columns.Add(new() { Header = "数量", BindingPath = "Num" });
+
+            if (PerPriceColumn.HasValue)
+                columns.Add(new() { Header = "单价", BindingPath = "PerPrice" });
+
+            if (DescColumn.HasValue)
+                columns.Add(new() { Header = "备注", BindingPath = "Description" });
+
+            return columns;
+        }
     }
 
     public static class ConfigLoader

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CarrotMRO"
         xmlns:hc="https://handyorg.github.io/handycontrol"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         d:DataContext="{d:DesignInstance Type=local:MainViewModel}"
         mc:Ignorable="d"
         Title="MainWindow" Height="600" Width="1200">
@@ -23,14 +24,17 @@
             <TabItem Header="模板">
                 <Grid>
                     <DataGrid ItemsSource="{Binding StandardItems}" AutoGenerateColumns="False" MinColumnWidth="120">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
-                            <DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                        <i:Interaction.Behaviors>
+                            <local:DynamicColumnsBehavior Columns="{Binding StandardDataGridcolumns}" />
+                        </i:Interaction.Behaviors>
+                        <!--<DataGrid.Columns>-->
+                            <!--<DataGridTextColumn Header="项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                            <!--<DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
                             <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
+                            <!--<DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
                             <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
-                            <DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>
-                        </DataGrid.Columns>
+                            <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--</DataGrid.Columns>-->
                     </DataGrid>
                 </Grid>
             </TabItem>
