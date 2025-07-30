@@ -78,7 +78,7 @@ namespace CarrotMRO
             this.AuxMaterialInPerPrice = auxMaterialInPerPrice;
             this.MachineInPerPrice = machineInPerPrice;
             this.LaborInPerPrice = laborInPerPrice;
-            if(description != null) this.Description = description;
+            if (description != null) this.Description = description;
             this.SumPrice = sumPrice;
 
             // 步骤3：关闭“内部更新”模式，恢复正常的交互逻辑
@@ -186,11 +186,7 @@ namespace CarrotMRO
         {
             _isUpdatingInternally = true;
             // 如果下级都为null，则自身也为null；否则进行计算
-            if (!BaseMaterialInPerPrice.HasValue && !AuxMaterialInPerPrice.HasValue)
-            {
-                MaterialInPerPrice = null;
-            }
-            else
+            if (BaseMaterialInPerPrice.HasValue || AuxMaterialInPerPrice.HasValue)
             {
                 MaterialInPerPrice = (BaseMaterialInPerPrice ?? 0) + (AuxMaterialInPerPrice ?? 0);
             }
@@ -207,11 +203,9 @@ namespace CarrotMRO
         {
             _isUpdatingInternally = true;
             // 如果下级都为null，则自身也为null；否则进行计算
-            if (!MaterialInPerPrice.HasValue && !MachineInPerPrice.HasValue && !LaborInPerPrice.HasValue)
-            {
-                PerPrice = null;
-            }
-            else
+            if (MaterialInPerPrice.HasValue
+                || MachineInPerPrice.HasValue
+                || LaborInPerPrice.HasValue)
             {
                 PerPrice = (MaterialInPerPrice ?? 0) + (MachineInPerPrice ?? 0) + (LaborInPerPrice ?? 0);
             }

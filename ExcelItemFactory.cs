@@ -41,12 +41,12 @@ namespace CarrotMRO
                 name: GetCellValue<string>(worksheet, row, headers.NameColumn),
                 unit: GetCellValue<string>(worksheet, row, headers.UnitColumn),
                 num: GetCellValue<decimal>(worksheet, row, headers.NumColumn),
-                baseMaterialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.BaseMaterialInPerPriceColumn),
-                auxMaterialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.AuxMaterialInPerPriceColumn),
-                materialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.MaterialInPerPriceColumn),
-                machineInPerPrice: GetCellValue<decimal>(worksheet, row, headers.MachineInPerPriceColumn),
-                laborInPerPrice: GetCellValue<decimal>(worksheet, row, headers.LaborInPerPriceColumn),
-                perPrice: GetCellValue<decimal>(worksheet, row, headers.PerPriceColumn),
+                baseMaterialInPerPrice: GetCellValue<decimal?>(worksheet, row, headers.BaseMaterialInPerPriceColumn),
+                auxMaterialInPerPrice: GetCellValue<decimal?>(worksheet, row, headers.AuxMaterialInPerPriceColumn),
+                materialInPerPrice: GetCellValue<decimal?>(worksheet, row, headers.MaterialInPerPriceColumn),
+                machineInPerPrice: GetCellValue<decimal?>(worksheet, row, headers.MachineInPerPriceColumn),
+                laborInPerPrice: GetCellValue<decimal?>(worksheet, row, headers.LaborInPerPriceColumn),
+                perPrice: GetCellValue<decimal?>(worksheet, row, headers.PerPriceColumn),
                 sumPrice: GetCellValue<decimal>(worksheet, row, headers.SumPriceColumn),
                 description: GetCellValue<string>(worksheet, row, headers.DescColumn)
             );
@@ -172,7 +172,7 @@ namespace CarrotMRO
 
         }
 
-        private static T? GetCellValue<T>(IXLWorksheet ws, int row, int? column)
+        private static T GetCellValue<T>(IXLWorksheet ws, int row, int? column)
         {
             if (!column.HasValue || column <= 0) return default;
 
