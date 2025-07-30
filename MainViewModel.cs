@@ -58,7 +58,7 @@ namespace CarrotMRO
         public IEnumerable<string> FilteredStandardItemNames => StandardItems.Select(i => i.Name).Where(item => item.Contains(SelectedStandardItemName, StringComparison.CurrentCultureIgnoreCase));
 
         [ObservableProperty]
-        private GeneralItem newItem;
+        private GeneralItem newItem = new();
 
         [ObservableProperty]
         private ObservableCollection<GeneralItem> userItems = new ObservableCollection<GeneralItem>();
@@ -222,14 +222,14 @@ namespace CarrotMRO
                     MessageBox.Show("未匹配到标准项目");
                     return;
                 }
-                if (_appConfig.Validate.Unit && ItemUnit != matchItem.Unit)
+                if (_appConfig.Validate.Unit && NewItem.Unit != matchItem.Unit)
                 {
-                    MessageBox.Show($"当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
+                    MessageBox.Show($"当前单位({NewItem.Unit})与标准单位({matchItem.Unit})不匹配");
                     return;
                 }
-                if (_appConfig.Validate.PerPrice && ItemPerPrice != matchItem.PerPrice)
+                if (_appConfig.Validate.PerPrice && NewItem.PerPrice != matchItem.PerPrice)
                 {
-                    MessageBox.Show($"当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
+                    MessageBox.Show($"当前单价({NewItem.PerPrice})与标准单价({matchItem.PerPrice})不匹配");
                     return;
                 }
             }
@@ -244,16 +244,7 @@ namespace CarrotMRO
         {
             try
             {
-                UserItems.Add(new GeneralItem()
-                {
-                    Part = SelectedPart,
-                    Name = SelectedStandardItemName,
-                    CustomName = SelectedCustomItemName,
-                    Num = ItemNum,
-                    Description = ItemDesc,
-                    Unit = ItemUnit,
-                    PerPrice = ItemPerPrice,
-                });
+                UserItems.Add(NewItem.Copy());
 
                 if (!CustomItemNames.Contains(SelectedCustomItemName))
                     CustomItemNames.Add(SelectedCustomItemName);
@@ -280,11 +271,11 @@ namespace CarrotMRO
                 {
                     if (_appConfig.Validate.Unit && item.Unit != matchItem.Unit)
                     {
-                        stringBuilder.AppendLine($"项目({item.Name}):当前单位({ItemUnit})与标准单位({matchItem.Unit})不匹配");
+                        stringBuilder.AppendLine($"项目({item.Name}):当前单位({item.Unit})与标准单位({matchItem.Unit})不匹配");
                     }
                     if (_appConfig.Validate.PerPrice && item.PerPrice != matchItem.PerPrice)
                     {
-                        stringBuilder.AppendLine($"项目({item.Name}):当前单价({ItemPerPrice})与标准单价({matchItem.PerPrice})不匹配");
+                        stringBuilder.AppendLine($"项目({item.Name}):当前单价({item.PerPrice})与标准单价({matchItem.PerPrice})不匹配");
                     }
                 }
             }

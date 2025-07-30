@@ -34,22 +34,23 @@ namespace CarrotMRO
 
             if (headers == null) return null;
 
-            return new GeneralItem
-            {
-                Part = GetCellValue<string>(worksheet, row, headers.PartColumn),
-                CustomName = GetCellValue<string>(worksheet, row, headers.CustomNameColumn),
-                Name = GetCellValue<string>(worksheet, row, headers.NameColumn),
-                Unit = GetCellValue<string>(worksheet, row, headers.UnitColumn),
-                Num = GetCellValue<double>(worksheet, row, headers.NumColumn),
-                PerPrice = GetCellValue<double>(worksheet, row, headers.PerPriceColumn),
-                MaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.MaterialInPerPriceColumn),
-                BaseMaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.BaseMaterialInPerPriceColumn),
-                AuxMaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.AuxMaterialInPerPriceColumn),
-                MachineInPerPrice = GetCellValue<double>(worksheet, row, headers.MachineInPerPriceColumn),
-                LaborInPerPrice = GetCellValue<double>(worksheet, row, headers.LaborInPerPriceColumn),
-                SumPrice = GetCellValue<double>(worksheet, row, headers.SumPriceColumn),
-                Description = GetCellValue<string>(worksheet, row, headers.DescColumn)
-            };
+            var item = new GeneralItem();
+            item.SetInitialValues(
+                part: GetCellValue<string>(worksheet, row, headers.PartColumn),
+                customName: GetCellValue<string>(worksheet, row, headers.CustomNameColumn),
+                name: GetCellValue<string>(worksheet, row, headers.NameColumn),
+                unit: GetCellValue<string>(worksheet, row, headers.UnitColumn),
+                num: GetCellValue<decimal>(worksheet, row, headers.NumColumn),
+                baseMaterialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.BaseMaterialInPerPriceColumn),
+                auxMaterialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.AuxMaterialInPerPriceColumn),
+                materialInPerPrice: GetCellValue<decimal>(worksheet, row, headers.MaterialInPerPriceColumn),
+                machineInPerPrice: GetCellValue<decimal>(worksheet, row, headers.MachineInPerPriceColumn),
+                laborInPerPrice: GetCellValue<decimal>(worksheet, row, headers.LaborInPerPriceColumn),
+                perPrice: GetCellValue<decimal>(worksheet, row, headers.PerPriceColumn),
+                sumPrice: GetCellValue<decimal>(worksheet, row, headers.SumPriceColumn),
+                description: GetCellValue<string>(worksheet, row, headers.DescColumn)
+            );
+            return item;
         }
 
         public static void ItemWrite(HeaderConfig headers, IXLWorksheet worksheet, int row, GeneralItem item)
@@ -75,6 +76,8 @@ namespace CarrotMRO
             if (headers == null) return;
 
             // 动态设置单元格值
+            SetCellValue(worksheet, row, headers.PartColumn, item.Part);
+            SetCellValue(worksheet, row, headers.CustomNameColumn, item.CustomName);
             SetCellValue(worksheet, row, headers.NameColumn, item.Name);
             SetCellValue(worksheet, row, headers.UnitColumn, item.Unit);
             SetCellValue(worksheet, row, headers.NumColumn, item.Num);
@@ -169,7 +172,7 @@ namespace CarrotMRO
 
         }
 
-        private static T GetCellValue<T>(IXLWorksheet ws, int row, int? column)
+        private static T? GetCellValue<T>(IXLWorksheet ws, int row, int? column)
         {
             if (!column.HasValue || column <= 0) return default;
 

@@ -134,7 +134,7 @@ namespace CarrotMRO
                 columns.Add(new() { Header = "主材单价", BindingPath = "BaseMaterialInPerPrice" });
 
             if (AuxMaterialInPerPriceColumn.HasValue)
-                columns.Add(new() { Header = "辅材单价", BindingPath = "AuxMaterialInPerPrice" });
+                columns.Add(new() { Header = "辅材单价", BindingPath = "AuxMaterialInPerPrice"});
 
             if (MachineInPerPriceColumn.HasValue)
                 columns.Add(new() { Header = "机械单价", BindingPath = "MachineInPerPrice" });

@@ -11,6 +11,8 @@ namespace CarrotMRO
     {
         public string Header { get; set; }
         public string BindingPath { get; set; }
+        public string StringFormat { get; set; }
         public BindingMode BindingMode { get; set; } = BindingMode.TwoWay;
+        public UpdateSourceTrigger UpdateSourceTrigger { get; set; } = UpdateSourceTrigger.LostFocus;
     }
 }
