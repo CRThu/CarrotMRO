@@ -58,16 +58,7 @@ namespace CarrotMRO
         public IEnumerable<string> FilteredStandardItemNames => StandardItems.Select(i => i.Name).Where(item => item.Contains(SelectedStandardItemName, StringComparison.CurrentCultureIgnoreCase));
 
         [ObservableProperty]
-        private string itemUnit = "";
-
-        [ObservableProperty]
-        private double itemPerPrice = 1;
-
-        [ObservableProperty]
-        private double itemNum = 1;
-
-        [ObservableProperty]
-        private string itemDesc = "";
+        private GeneralItem newItem;
 
         [ObservableProperty]
         private ObservableCollection<GeneralItem> userItems = new ObservableCollection<GeneralItem>();
@@ -82,7 +73,8 @@ namespace CarrotMRO
         public MainViewModel()
         {
             // 更新datagrid直接编辑的元素值到autosave
-            UserItems.CollectionChanged += (s, e) => {
+            UserItems.CollectionChanged += (s, e) =>
+            {
                 if (e.NewItems != null && e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
                 {
                     foreach (GeneralItem item in e.NewItems)
@@ -107,7 +99,7 @@ namespace CarrotMRO
             try
             {
                 var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
-                ExcelHelper.WriteToExcel(_appConfig, UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.AutoSaveHeader, ExcelItemFactory.AutosaveItemWrite);
+                ExcelHelper.WriteToExcel(_appConfig.Autosave.Header, UserItems.ToList(), autoSaveExcelFilePath, true, ExcelItemFactory.ItemWrite);
             }
             catch (Exception ex)
             {
@@ -115,19 +107,38 @@ namespace CarrotMRO
             }
         }
 
+        partial void OnSelectedPartChanged(string value)
+        {
+            NewItem.Part = SelectedPart;
+        }
+
+        partial void OnSelectedCustomItemNameChanged(string value)
+        {
+            NewItem.CustomName = SelectedCustomItemName;
+        }
+
         partial void OnSelectedStandardItemNameChanged(string value)
         {
+            NewItem.Name = SelectedStandardItemName;
+
             GeneralItem? matchItem = StandardItems.FirstOrDefault(i => i.Name == SelectedStandardItemName);
             if (matchItem != null)
             {
                 if (_appConfig.Match.Unit)
-                    ItemUnit = matchItem.Unit;
+                    NewItem.Unit = matchItem.Unit;
                 if (_appConfig.Match.Num)
-                    ItemNum = matchItem.Num;
+                    NewItem.Num = matchItem.Num;
                 if (_appConfig.Match.PerPrice)
-                    ItemPerPrice = matchItem.PerPrice;
+                {
+                    NewItem.BaseMaterialInPerPrice = matchItem.BaseMaterialInPerPrice;
+                    NewItem.AuxMaterialInPerPrice = matchItem.AuxMaterialInPerPrice;
+                    NewItem.MaterialInPerPrice = matchItem.MaterialInPerPrice;
+                    NewItem.MachineInPerPrice = matchItem.MachineInPerPrice;
+                    NewItem.LaborInPerPrice = matchItem.LaborInPerPrice;
+                    NewItem.PerPrice = matchItem.PerPrice;
+                }
                 if (_appConfig.Match.Desc)
-                    ItemDesc = matchItem.Description;
+                    NewItem.Description = matchItem.Description;
             }
         }
 
@@ -136,7 +147,8 @@ namespace CarrotMRO
         {
             try
             {
-                OpenFileDialog ofd = new OpenFileDialog() {
+                OpenFileDialog ofd = new OpenFileDialog()
+                {
                     InitialDirectory = ProjectDirectory,
                     Filter = "YAML 文件|*.yaml;*.yml|所有文件|*.*",
                     DefaultExt = "yaml"
@@ -168,7 +180,7 @@ namespace CarrotMRO
                 var standardExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Standard.FileName);
                 if (File.Exists(standardExcelFilePath))
                 {
-                    var standardItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig, standardExcelFilePath, ExcelItemFactory.StandardItemRead);
+                    var standardItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig.Standard.Header, standardExcelFilePath, ExcelItemFactory.ItemRead);
                     StandardItems.Clear();
                     for (int i = 0; i < standardItemsFromExcel.Count; i++)
                     {
@@ -184,7 +196,7 @@ namespace CarrotMRO
                 var autoSaveExcelFilePath = Path.Combine(ProjectDirectory, _appConfig.Autosave.FileName);
                 if (File.Exists(autoSaveExcelFilePath))
                 {
-                    var autosaveItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig, autoSaveExcelFilePath, ExcelItemFactory.AutosaveItemRead);
+                    var autosaveItemsFromExcel = ExcelHelper.ReadFromExcel(_appConfig.Autosave.Header, autoSaveExcelFilePath, ExcelItemFactory.ItemRead);
                     UserItems.Clear();
                     for (int i = 0; i < autosaveItemsFromExcel.Count; i++)
                     {
@@ -232,7 +244,8 @@ namespace CarrotMRO
         {
             try
             {
-                UserItems.Add(new GeneralItem() {
+                UserItems.Add(new GeneralItem()
+                {
                     Part = SelectedPart,
                     Name = SelectedStandardItemName,
                     CustomName = SelectedCustomItemName,
@@ -305,7 +318,8 @@ namespace CarrotMRO
         [RelayCommand]
         public void GenerateReport()
         {
-            SaveFileDialog sfd = new SaveFileDialog() {
+            SaveFileDialog sfd = new SaveFileDialog()
+            {
                 Title = "保存Excel文件",
                 Filter = "Excel文件 (*.xlsx)|*.xlsx|所有文件 (*.*)|*.*",
                 DefaultExt = ".xlsx",
@@ -319,8 +333,7 @@ namespace CarrotMRO
                 if (_appConfig.Quotation.Group)
                 {
                     var groupedItems = UserItems.GroupBy(item => item.Part);
-                    var headers = _appConfig.Quotation.Header.GetFullHeaders();
-                    ExcelHelper.WriteToExcel(_appConfig, groupedItems, sfd.FileName, true, headers, ExcelItemFactory.QuotationItemWrite);
+                    ExcelHelper.WriteToExcel(_appConfig.Quotation.Header, groupedItems, sfd.FileName, true, ExcelItemFactory.ItemWrite);
                 }
                 else
                 {

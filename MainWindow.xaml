@@ -28,12 +28,12 @@
                             <local:DynamicColumnsBehavior Columns="{Binding StandardDataGridColumns}" />
                         </i:Interaction.Behaviors>
                         <!--<DataGrid.Columns>-->
-                            <!--<DataGridTextColumn Header="项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
-                            <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
+                        <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
                         <!--</DataGrid.Columns>-->
                     </DataGrid>
                 </Grid>
@@ -59,19 +59,34 @@
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="单位" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
-                            <TextBox Text="{Binding ItemUnit}" Margin="5,5,5,5" Width="250"/>
+                            <TextBox Text="{Binding NewItem.Unit}" Margin="5,5,5,5" Width="250"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="单价" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
-                            <TextBox Text="{Binding ItemPerPrice}" Margin="5,5,5,5" Width="250"/>
+                            <TextBlock Text="综合单价" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
+                            <TextBox Text="{Binding NewItem.PerPrice}" Margin="5,5,5,5" Width="250"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="=材料" Margin="25,5,5,5" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewItem.MaterialInPerPrice}" Margin="5,5,5,5" Width="70"/>
+                            <TextBlock Text="(主材" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewItem.BaseMaterialInPerPrice}" Margin="5,5,5,5" Width="60"/>
+                            <TextBlock Text="+辅材" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewItem.AuxMaterialInPerPrice}" Margin="5,5,5,5" Width="60"/>
+                            <TextBlock Text=")" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="+机械" Margin="25,5,5,5" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewItem.MachineInPerPrice}" Margin="5,5,5,5" Width="70"/>
+                            <TextBlock Text="+人工" Margin="5,5,5,5" VerticalAlignment="Center"/>
+                            <TextBox Text="{Binding NewItem.LaborInPerPrice}" Margin="5,5,5,5" Width="70"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="数量" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
-                            <TextBox Text="{Binding ItemNum}" Margin="5,5,5,5" Width="250"/>
+                            <TextBox Text="{Binding NewItem.Num}" Margin="5,5,5,5" Width="250"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="备注" Margin="5,5,5,5" VerticalAlignment="Center" Width="75"/>
-                            <TextBox Text="{Binding ItemDesc}" Margin="5,5,5,5" Width="250"/>
+                            <TextBox Text="{Binding NewItem.Description}" Margin="5,5,5,5" Width="250"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <Button Content="验证" Command="{Binding ValidateNewItemCommand}" Margin="5,5,5,5" Width="50"/>
@@ -85,14 +100,14 @@
                             <local:DynamicColumnsBehavior Columns="{Binding QuotationDataGridColumns}" />
                         </i:Interaction.Behaviors>
                         <!--<DataGrid.Columns>-->
-                            <!--<DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="自定项目" Binding="{Binding CustomName,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
-                            <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
-                            <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="类目" Binding="{Binding Part,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="自定项目" Binding="{Binding CustomName,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="标准项目" Binding="{Binding Name,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="单位" Binding="{Binding Unit,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="数量" Binding="{Binding Num,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="单价" Binding="{Binding PerPrice,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
+                        <!--<DataGridTextColumn Header="总价" Binding="{Binding SumPrice,Mode=OneWay}"/>-->
+                        <!--<DataGridTextColumn Header="备注" Binding="{Binding Description,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}"/>-->
                         <!--</DataGrid.Columns>-->
                     </DataGrid>
 

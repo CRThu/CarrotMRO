@@ -9,6 +9,11 @@ standard:
     unit: 2
     num: 
     perPrice: 4
+    materialInPerPrice: 
+    baseMaterialInPerPrice: 
+    auxMaterialInPerPrice: 
+    machinelInPerPrice: 
+    laborInPerPrice: 
     sumPrice: 
     desc: 5
 
@@ -21,6 +26,11 @@ quotation:
     unit: 3
     num: 4
     perPrice: 5
+    materialInPerPrice: 
+    baseMaterialInPerPrice: 
+    auxMaterialInPerPrice: 
+    machinelInPerPrice: 
+    laborInPerPrice: 
     sumPrice: 6
     desc: 7
 
@@ -33,6 +43,11 @@ autosave:
     unit: 4
     num: 5
     perPrice: 6
+    materialInPerPrice: 
+    baseMaterialInPerPrice: 
+    auxMaterialInPerPrice: 
+    machinelInPerPrice: 
+    laborInPerPrice: 
     sumPrice: 
     desc: 7
 

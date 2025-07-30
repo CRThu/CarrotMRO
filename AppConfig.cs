@@ -82,6 +82,22 @@ namespace CarrotMRO
         [YamlMember(Alias = "perPrice")]
         public int? PerPriceColumn { get; set; }
 
+        [YamlMember(Alias = "materialInPerPrice")]
+        public int? MaterialInPerPriceColumn { get; set; }
+
+        [YamlMember(Alias = "baseMaterialInPerPrice")]
+        public int? BaseMaterialInPerPriceColumn { get; set; }
+
+        [YamlMember(Alias = "auxMaterialInPerPrice")]
+        public int? AuxMaterialInPerPriceColumn { get; set; }
+
+        [YamlMember(Alias = "machinelInPerPrice")]
+        public int? MachineInPerPriceColumn { get; set; }
+
+        [YamlMember(Alias = "laborInPerPrice")]
+        public int? LaborInPerPriceColumn { get; set; }
+
+        //laborInPerPrice: 
         [YamlMember(Alias = "sumPrice")]
         public int? SumPriceColumn { get; set; }
 
@@ -109,7 +125,22 @@ namespace CarrotMRO
                 columns.Add(new() { Header = "数量", BindingPath = "Num" });
 
             if (PerPriceColumn.HasValue)
-                columns.Add(new() { Header = "单价", BindingPath = "PerPrice" });
+                columns.Add(new() { Header = "综合单价", BindingPath = "PerPrice" });
+
+            if (MaterialInPerPriceColumn.HasValue)
+                columns.Add(new() { Header = "材料单价", BindingPath = "MaterialInPerPrice" });
+
+            if (BaseMaterialInPerPriceColumn.HasValue)
+                columns.Add(new() { Header = "主材单价", BindingPath = "BaseMaterialInPerPrice" });
+
+            if (AuxMaterialInPerPriceColumn.HasValue)
+                columns.Add(new() { Header = "辅材单价", BindingPath = "AuxMaterialInPerPrice" });
+
+            if (MachineInPerPriceColumn.HasValue)
+                columns.Add(new() { Header = "机械单价", BindingPath = "MachineInPerPrice" });
+
+            if (LaborInPerPriceColumn.HasValue)
+                columns.Add(new() { Header = "人工单价", BindingPath = "LaborInPerPrice" });
 
             if (SumPriceColumn.HasValue)
                 columns.Add(new() { Header = "总价", BindingPath = "SumPrice", BindingMode = BindingMode.OneWay });
@@ -121,13 +152,19 @@ namespace CarrotMRO
         }
 
         // 列名映射字典
-        private static readonly Dictionary<string, string> _headerTexts = new() {
+        private static readonly Dictionary<string, string> _headerTexts = new()
+        {
             [nameof(PartColumn)] = "类目",
             [nameof(CustomNameColumn)] = "自定项目",
             [nameof(NameColumn)] = "标准项目",
             [nameof(UnitColumn)] = "单位",
             [nameof(NumColumn)] = "数量",
-            [nameof(PerPriceColumn)] = "单价",
+            [nameof(PerPriceColumn)] = "综合单价",
+            [nameof(MaterialInPerPriceColumn)] = "材料单价",
+            [nameof(BaseMaterialInPerPriceColumn)] = "主材单价",
+            [nameof(AuxMaterialInPerPriceColumn)] = "辅材单价",
+            [nameof(MachineInPerPriceColumn)] = "机械单价",
+            [nameof(LaborInPerPriceColumn)] = "人工单价",
             [nameof(SumPriceColumn)] = "总价",
             [nameof(DescColumn)] = "备注"
         };

@@ -9,26 +9,9 @@ namespace CarrotMRO
 {
     public static class ExcelItemFactory
     {
-        // TODO
-        public static string[] AutoSaveHeader = new string[] {
-            "类目",
-            "自定项目",
-            "标准项目",
-            "单位",
-            "数量",
-            "单价",
-            "备注" };
-
-        //public static string[] OutHeader = new string[] {
-        //    "标准项目",
-        //    "单位",
-        //    "数量",
-        //    "单价",
-        //    "总价",
-        //    "备注" };
-
-        public static GeneralItem StandardItemRead(AppConfig config, IXLWorksheet worksheet, int row)
+        public static GeneralItem ItemRead(HeaderConfig headers, IXLWorksheet worksheet, int row)
         {
+            // Standard Old Generation
             //var item = new GeneralItem {
             //    Name = worksheet.Cell(row, 1).GetString(),
             //    Unit = worksheet.Cell(row, 2).GetString(),
@@ -36,50 +19,51 @@ namespace CarrotMRO
             //    Description = worksheet.Cell(row, 5).GetString()
             //};
             //return item;
-            var header = config.Standard?.Header;
-            if (header == null) return null;
+            // Autosave Old Generation
+            //var item = new GeneralItem
+            //{
+            //    Part = worksheet.Cell(row, 1).GetString(),
+            //    CustomName = worksheet.Cell(row, 2).GetString(),
+            //    Name = worksheet.Cell(row, 3).GetString(),
+            //    Unit = worksheet.Cell(row, 4).GetString(),
+            //    Num = worksheet.Cell(row, 5).GetValue<double>(),
+            //    PerPrice = worksheet.Cell(row, 6).GetValue<double>(),
+            //    Description = worksheet.Cell(row, 7).GetString()
+            //};
+            //return item;
 
-            return new GeneralItem {
-                Part = GetCellValue<string>(worksheet, row, header.PartColumn),
-                CustomName = GetCellValue<string>(worksheet, row, header.CustomNameColumn),
-                Name = GetCellValue<string>(worksheet, row, header.NameColumn),
-                Unit = GetCellValue<string>(worksheet, row, header.UnitColumn),
-                Num = GetCellValue<double>(worksheet, row, header.NumColumn),
-                PerPrice = GetCellValue<double>(worksheet, row, header.PerPriceColumn),
-                //SumPrice = GetCellValue<double>(worksheet, row, header.SumPriceColumn),
-                Description = GetCellValue<string>(worksheet, row, header.DescColumn)
+            if (headers == null) return null;
+
+            return new GeneralItem
+            {
+                Part = GetCellValue<string>(worksheet, row, headers.PartColumn),
+                CustomName = GetCellValue<string>(worksheet, row, headers.CustomNameColumn),
+                Name = GetCellValue<string>(worksheet, row, headers.NameColumn),
+                Unit = GetCellValue<string>(worksheet, row, headers.UnitColumn),
+                Num = GetCellValue<double>(worksheet, row, headers.NumColumn),
+                PerPrice = GetCellValue<double>(worksheet, row, headers.PerPriceColumn),
+                MaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.MaterialInPerPriceColumn),
+                BaseMaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.BaseMaterialInPerPriceColumn),
+                AuxMaterialInPerPrice = GetCellValue<double>(worksheet, row, headers.AuxMaterialInPerPriceColumn),
+                MachineInPerPrice = GetCellValue<double>(worksheet, row, headers.MachineInPerPriceColumn),
+                LaborInPerPrice = GetCellValue<double>(worksheet, row, headers.LaborInPerPriceColumn),
+                SumPrice = GetCellValue<double>(worksheet, row, headers.SumPriceColumn),
+                Description = GetCellValue<string>(worksheet, row, headers.DescColumn)
             };
         }
 
-        public static GeneralItem AutosaveItemRead(AppConfig config, IXLWorksheet worksheet, int row)
+        public static void ItemWrite(HeaderConfig headers, IXLWorksheet worksheet, int row, GeneralItem item)
         {
-            // TODO
-            var item = new GeneralItem {
-                Part = worksheet.Cell(row, 1).GetString(),
-                CustomName = worksheet.Cell(row, 2).GetString(),
-                Name = worksheet.Cell(row, 3).GetString(),
-                Unit = worksheet.Cell(row, 4).GetString(),
-                Num = worksheet.Cell(row, 5).GetValue<double>(),
-                PerPrice = worksheet.Cell(row, 6).GetValue<double>(),
-                Description = worksheet.Cell(row, 7).GetString()
-            };
-            return item;
-        }
+            // Autosave Old Generation
+            //worksheet.Cell(row, 1).Value = item.Part;
+            //worksheet.Cell(row, 2).Value = item.CustomName;
+            //worksheet.Cell(row, 3).Value = item.Name;
+            //worksheet.Cell(row, 4).Value = item.Unit;
+            //worksheet.Cell(row, 5).Value = item.Num;
+            //worksheet.Cell(row, 6).Value = item.PerPrice;
+            //worksheet.Cell(row, 7).Value = item.Description;
 
-        public static void AutosaveItemWrite(AppConfig config, IXLWorksheet worksheet, int row, GeneralItem item)
-        {
-            // TODO
-            worksheet.Cell(row, 1).Value = item.Part;
-            worksheet.Cell(row, 2).Value = item.CustomName;
-            worksheet.Cell(row, 3).Value = item.Name;
-            worksheet.Cell(row, 4).Value = item.Unit;
-            worksheet.Cell(row, 5).Value = item.Num;
-            worksheet.Cell(row, 6).Value = item.PerPrice;
-            worksheet.Cell(row, 7).Value = item.Description;
-        }
-
-        public static void QuotationItemWrite(AppConfig config, IXLWorksheet worksheet, int row, GeneralItem item)
-        {
+            // Quotation Old Generation
             //worksheet.Cell(row, 1).Value = item.Name;
             //worksheet.Cell(row, 2).Value = item.Unit;
             //worksheet.Cell(row, 3).Value = item.Num;
@@ -88,23 +72,100 @@ namespace CarrotMRO
             //worksheet.Cell(row, 6).Value = item.Description;
 
             // 获取配置中的列映射
-            var header = config.Quotation?.Header;
-            if (header == null) return;
+            if (headers == null) return;
 
             // 动态设置单元格值
-            SetCellValue(worksheet, row, header.NameColumn, item.Name);
-            SetCellValue(worksheet, row, header.UnitColumn, item.Unit);
-            SetCellValue(worksheet, row, header.NumColumn, item.Num);
-            SetCellValue(worksheet, row, header.PerPriceColumn, item.PerPrice);
-            if (header.NumColumn.HasValue && header.PerPriceColumn.HasValue)
+            SetCellValue(worksheet, row, headers.NameColumn, item.Name);
+            SetCellValue(worksheet, row, headers.UnitColumn, item.Unit);
+            SetCellValue(worksheet, row, headers.NumColumn, item.Num);
+            SetCellValue(worksheet, row, headers.BaseMaterialInPerPriceColumn, item.BaseMaterialInPerPrice);
+            SetCellValue(worksheet, row, headers.AuxMaterialInPerPriceColumn, item.AuxMaterialInPerPrice);
+            SetCellValue(worksheet, row, headers.MachineInPerPriceColumn, item.MachineInPerPrice);
+            SetCellValue(worksheet, row, headers.LaborInPerPriceColumn, item.LaborInPerPrice);
+
+            if (headers.BaseMaterialInPerPriceColumn.HasValue
+                && headers.AuxMaterialInPerPriceColumn.HasValue)
             {
-                SetCellFormula(worksheet, row, header.SumPriceColumn, $"={GetColumnLetter(header.NumColumn)}{row}*{GetColumnLetter(header.PerPriceColumn)}{row}");
+                // 如果有主材与辅材列,则设置公式计算材料单价
+                SetCellFormula(worksheet, row, headers.MaterialInPerPriceColumn,
+                    $"={GetColumnLetter(headers.BaseMaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.AuxMaterialInPerPriceColumn)}{row}");
             }
             else
             {
-                SetCellValue(worksheet, row, header.SumPriceColumn, item.SumPrice);
+                SetCellValue(worksheet, row, headers.MaterialInPerPriceColumn, item.MaterialInPerPrice);
             }
-            SetCellValue(worksheet, row, header.DescColumn, item.Description);
+
+            if (headers.MaterialInPerPriceColumn.HasValue
+                && headers.MachineInPerPriceColumn.HasValue
+                && headers.LaborInPerPriceColumn.HasValue)
+            {
+                // 如果有材料、机械、人工列,则设置公式计算综合单价
+                SetCellFormula(worksheet, row, headers.PerPriceColumn,
+                    $"={GetColumnLetter(headers.MaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.MachineInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.LaborInPerPriceColumn)}{row}");
+            }
+            else if (headers.BaseMaterialInPerPriceColumn.HasValue
+                && headers.AuxMaterialInPerPriceColumn.HasValue
+                && headers.MachineInPerPriceColumn.HasValue
+                && headers.LaborInPerPriceColumn.HasValue)
+            {
+                // 如果有主材、辅材、机械、人工列,则设置公式计算综合单价
+                SetCellFormula(worksheet, row, headers.PerPriceColumn,
+                    $"={GetColumnLetter(headers.BaseMaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.AuxMaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.MachineInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.LaborInPerPriceColumn)}{row}");
+            }
+            else
+            {
+                SetCellValue(worksheet, row, headers.PerPriceColumn, item.PerPrice);
+            }
+
+            if (headers.NumColumn.HasValue
+                && headers.PerPriceColumn.HasValue)
+            {
+                // 如果有数量与单价列,则设置公式计算总价
+                SetCellFormula(worksheet, row, headers.SumPriceColumn,
+                    $"={GetColumnLetter(headers.NumColumn)}{row}" +
+                    $"*{GetColumnLetter(headers.PerPriceColumn)}{row}");
+            }
+            else if (headers.NumColumn.HasValue
+                && headers.MaterialInPerPriceColumn.HasValue
+                && headers.MachineInPerPriceColumn.HasValue
+                && headers.LaborInPerPriceColumn.HasValue)
+            {
+                // 如果有数量与材料、机械、人工列,则设置公式计算总价
+                SetCellFormula(worksheet, row, headers.SumPriceColumn,
+                    $"={GetColumnLetter(headers.NumColumn)}{row}" +
+                    $"*(" +
+                    $"{GetColumnLetter(headers.MaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.MachineInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.LaborInPerPriceColumn)}{row}" +
+                    ")");
+            }
+            else if (headers.NumColumn.HasValue
+                && headers.BaseMaterialInPerPriceColumn.HasValue
+                && headers.AuxMaterialInPerPriceColumn.HasValue
+                && headers.MachineInPerPriceColumn.HasValue
+                && headers.LaborInPerPriceColumn.HasValue)
+            {
+                // 如果有数量与主材、辅材、机械、人工列,则设置公式计算总价
+                SetCellFormula(worksheet, row, headers.SumPriceColumn,
+                    $"={GetColumnLetter(headers.NumColumn)}{row}" +
+                    $"*(" +
+                    $"{GetColumnLetter(headers.BaseMaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.AuxMaterialInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.MachineInPerPriceColumn)}{row}" +
+                    $"+{GetColumnLetter(headers.LaborInPerPriceColumn)}{row}" +
+                    ")");
+            }
+            else
+            {
+                SetCellValue(worksheet, row, headers.SumPriceColumn, item.SumPrice);
+            }
+            SetCellValue(worksheet, row, headers.DescColumn, item.Description);
 
         }
 
@@ -122,6 +183,7 @@ namespace CarrotMRO
                 return default;
             }
         }
+
         private static void SetCellValue(IXLWorksheet ws, int row, int? col, XLCellValue value)
         {
             if (!col.HasValue || col <= 0) return;

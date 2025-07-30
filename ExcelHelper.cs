@@ -12,7 +12,7 @@ namespace CarrotMRO
         /// </summary>
         /// <param name="filePath">Excel文件路径</param>
         /// <returns>读取的项目列表</returns>
-        public static List<GeneralItem> ReadFromExcel(AppConfig config, string filePath, Func<AppConfig, IXLWorksheet, int, GeneralItem> factory)
+        public static List<GeneralItem> ReadFromExcel(HeaderConfig headers, string filePath, Func<HeaderConfig, IXLWorksheet, int, GeneralItem> factory)
         {
             if (!File.Exists(filePath))
             {
@@ -38,7 +38,7 @@ namespace CarrotMRO
                     //    Description = worksheet.Cell(row, 3).GetString(),
                     //    PerPrice = worksheet.Cell(row, 4).GetValue<double>()
                     //};
-                    var item = factory(config, worksheet, row);
+                    var item = factory(headers, worksheet, row);
 
                     items.Add(item);
                 }
@@ -58,7 +58,7 @@ namespace CarrotMRO
         /// <param name="filePath">Excel文件路径</param>
         /// <param name="overwrite">是否自动覆盖已存在文件</param>
         /// <returns>是否成功写入</returns>
-        public static bool WriteToExcel(AppConfig config, List<GeneralItem> items, string filePath, bool overwrite, string[] header, Action<AppConfig, IXLWorksheet, int, GeneralItem> itemFactory)
+        public static bool WriteToExcel(HeaderConfig headers, List<GeneralItem> items, string filePath, bool overwrite, Action<HeaderConfig, IXLWorksheet, int, GeneralItem> itemFactory)
         {
             if (items == null)
             {
@@ -77,8 +77,9 @@ namespace CarrotMRO
                 var worksheet = workbook.Worksheets.Add("Items");
 
                 // 写入表头
-                for (int i = 0; i < header.Length; i++)
-                    worksheet.Cell(1, i + 1).Value = header[i];
+                var headerStrings = headers.GetFullHeaders();
+                for (int i = 0; i < headerStrings.Length; i++)
+                    worksheet.Cell(1, i + 1).Value = headerStrings[i];
 
                 // 写入数据
                 for (int i = 0; i < items.Count; i++)
@@ -93,7 +94,7 @@ namespace CarrotMRO
                     //worksheet.Cell(row, 5).Value = item.Quantity;
                     //worksheet.Cell(row, 6).Value = item.CreatedDate;
 
-                    itemFactory(config, worksheet, row, item);
+                    itemFactory(headers, worksheet, row, item);
                 }
 
                 // 自动调整列宽
@@ -108,7 +109,7 @@ namespace CarrotMRO
                 throw new InvalidOperationException($"写入Excel文件时出错: {ex.Message}", ex);
             }
         }
-        public static bool WriteToExcel(AppConfig config, IEnumerable<IGrouping<string, GeneralItem>> groupedItems, string filePath, bool overwrite, string[] header, Action<AppConfig, IXLWorksheet, int, GeneralItem> itemFactory)
+        public static bool WriteToExcel(HeaderConfig headers, IEnumerable<IGrouping<string, GeneralItem>> groupedItems, string filePath, bool overwrite, Action<HeaderConfig, IXLWorksheet, int, GeneralItem> itemFactory)
         {
             if (groupedItems == null)
             {
@@ -127,8 +128,9 @@ namespace CarrotMRO
                 var worksheet = workbook.Worksheets.Add("Report");
 
                 // 写入表头
-                for (int i = 0; i < header.Length; i++)
-                    worksheet.Cell(1, i + 1).Value = header[i];
+                var headerStrings = headers.GetFullHeaders();
+                for (int i = 0; i < headerStrings.Length; i++)
+                    worksheet.Cell(1, i + 1).Value = headerStrings[i];
 
                 // 写入数据
                 int row = 2; // 数据从第二行开始
@@ -137,7 +139,7 @@ namespace CarrotMRO
                     worksheet.Cell(row, 1).Value = group.Key;
 
                     // 合并
-                    var rangeToMerge = worksheet.Range(row, 1, row, header.Length);
+                    var rangeToMerge = worksheet.Range(row, 1, row, headerStrings.Length);
                     rangeToMerge.Merge();
                     rangeToMerge.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                     rangeToMerge.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
@@ -146,7 +148,7 @@ namespace CarrotMRO
 
                     foreach (var item in group)
                     {
-                        itemFactory(config, worksheet, row, item);
+                        itemFactory(headers, worksheet, row, item);
                         row++;
                     }
                 }
