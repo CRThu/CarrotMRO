@@ -7,8 +7,8 @@ import os
 import json
 import shutil
 from pathlib import Path
-# 导入你的核心模块
-from photo_ai import recognize_photo_base64
+from typing import List
+from photo_ocr import recognize_photos_base64
 
 app = FastAPI()
 
@@ -20,34 +20,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 数据根目录
 DATA_ROOT = Path(os.getenv("DATA_ROOT", "data"))
-PROJECT_DIR = DATA_ROOT / os.getenv("PROJECT_SUBDIR", "project")
-TEMPLATE_DIR = DATA_ROOT / os.getenv("TEMPLATE_SUBDIR", "template")
+# 项目数据存放目录 (以前是 project, 现在改为 projects)
+PROJECT_BASE_DIR = DATA_ROOT / os.getenv("PROJECT_SUBDIR", "projects")
 
 # 确保目录存在
-PROJECT_DIR.mkdir(exist_ok=True, parents=True)
+PROJECT_BASE_DIR.mkdir(exist_ok=True, parents=True)
+TEMPLATE_DIR = DATA_ROOT / os.getenv("TEMPLATE_SUBDIR", "template")
+
+# 确保模板目录存在
 TEMPLATE_DIR.mkdir(exist_ok=True, parents=True)
 
 # 路由：获取所有项目
 @app.get("/api/projects")
 async def get_projects():
     projects = []
-    for f in PROJECT_DIR.glob("*.json"):
-        projects.append(f.stem)
+    # 查找所有的项目目录
+    if PROJECT_BASE_DIR.exists():
+        for d in PROJECT_BASE_DIR.iterdir():
+            if d.is_dir():
+                projects.append(d.name)
     return {"projects": projects}
 
 # 路由：OCR 接口
-@app.post("/api/ocr")
-async def ocr_image(file: UploadFile = File(...)):
-    # 读取图片数据
-    content = await file.read()
+@app.post("/api/ocr/{project_name}")
+async def ocr_images(project_name: str, files: List[UploadFile] = File(...)):
+    # 检查项目目录是否存在
+    project_dir = PROJECT_BASE_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="项目不存在")
+        
+    # 读取所有图片数据
+    content_list = []
+    for file in files:
+        content_list.append(await file.read())
     
-    # 调用 photo_ai 的 base64 接口
-    result = recognize_photo_base64(content)
+    # 调用 photo_ocr 的批量接口
+    result = recognize_photos_base64(content_list)
     
-    # 保存结果到本地 JSON
-    json_filename = f"{Path(file.filename).stem}.json"
-    json_path = PROJECT_DIR / json_filename
+    # 确定文件命名 (ocr-1.json, ocr-2.json, ...)
+    existing_files = list(project_dir.glob("ocr-*.json"))
+    new_index = len(existing_files) + 1
+    json_filename = f"ocr-{new_index}.json"
+    json_path = project_dir / json_filename
+    
+    # 保存结果
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
         
@@ -56,26 +74,63 @@ async def ocr_image(file: UploadFile = File(...)):
 # 路由：创建新项目
 @app.put("/api/create-project/{project_name}")
 async def create_project(project_name: str):
-    json_path = PROJECT_DIR / f"{project_name}.json"
+    project_dir = PROJECT_BASE_DIR / project_name
     
-    if json_path.exists():
-        raise HTTPException(status_code=400, detail="Project already exists")
-        
-    project_data = {
+    if project_dir.exists():
+        raise HTTPException(status_code=400, detail="项目已存在")
+    
+    # 创建项目目录
+    project_dir.mkdir(parents=True)
+    
+    # 在目录下创建 project.json
+    project_info = {
         "name": project_name,
         "created_at": datetime.now().isoformat()
     }
     
+    json_path = project_dir / "project.json"
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(project_data, f, ensure_ascii=False, indent=2)
+        json.dump(project_info, f, ensure_ascii=False, indent=2)
         
-    return {"message": "项目创建成功", "data": project_data}
+    return {"message": "项目创建成功", "data": project_info}
 
-# 路由：简单模拟 XLSX 生成（后续接入你的逻辑）
-@app.post("/api/export-xlsx")
-async def export_xlsx():
-    # 这里接入你的 process_excel 逻辑
-    return {"message": "XLSX 生成成功", "download_url": "/downloads/report.xlsx"}
+# 路由：获取项目下的所有 OCR 记录文件
+@app.get("/api/ocr-files/{project_name}")
+async def get_ocr_files(project_name: str):
+    project_dir = PROJECT_BASE_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="项目不存在")
+    
+    files = [f.name for f in project_dir.glob("ocr-*.json")]
+    # 按名称排序，通常是 ocr-1, ocr-2
+    files.sort(key=lambda x: int(x.split('-')[1].split('.')[0]))
+    return {"files": files}
+
+# 路由：获取具体的 OCR 结果内容
+@app.get("/api/ocr-data/{project_name}/{filename}")
+async def get_ocr_data(project_name: str, filename: str):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+@app.post("/api/save-ocr/{project_name}/{filename}")
+async def save_ocr(project_name: str, filename: str, data: dict):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    output = {
+        "success": True,
+        "data": data,
+        "timestamp": datetime.now().isoformat()
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    return {"message": "保存成功"}
 
 # 挂载前端静态文件 (打包后)
 static_dir = Path(__file__).parent / "static"
