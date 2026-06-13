@@ -57,7 +57,7 @@ def _ensure_configured():
     if client is None:
         raise RuntimeError("Gemini 未配置！请在 .env 中设置 GEMINI_API_KEY")
 
-def recognize_photos_base64(image_list: list[bytes]) -> dict:
+def ocr_images(image_list: list[bytes]) -> dict:
     """通过二进制数据列表识别多张图片"""
     _ensure_configured()
     
