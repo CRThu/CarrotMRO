@@ -21,6 +21,7 @@ function App() {
   const [ratecardTableData, setRatecardTableData] = useState<TableData>({ items: [], remarks: '' });
   const [ratecardImporting, setRatecardImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
   const fetchRateCards = async () => { try { const res = await api.getRateCards(); setRateCards(res.data.ratecards); } catch (err) { console.error(err); } };
@@ -31,7 +32,7 @@ function App() {
   useEffect(() => {
     if (currentProject) {
       fetchOcrFiles(currentProject);
-      api.getProjectInfo(currentProject).then(res => setProjectRateCard(res.data.ratecard_name));
+      api.getProjectInfo(currentProject).then(res => setProjectRateCard(res.data.ratecard_name)).catch((err: any) => { alert("获取项目信息失败: " + (err?.message || String(err))); });
       setTableData({ items: [], remarks: '' });
       setActiveTab('data');
     }
@@ -50,8 +51,20 @@ function App() {
     }
   }, [currentRateCard]);
 
+  // 组件卸载时清理 OCR 轮询定时器
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
+
   const handleEdit = (index: number, field: keyof TableItem, value: string) => {
-    const newItems = [...tableData.items];
+    const items = tableData?.items;
+    if (!items || index < 0 || index >= items.length) return;
+    const newItems = [...items];
     newItems[index][field] = value;
     setTableData({ ...tableData, items: newItems });
   };
@@ -59,7 +72,14 @@ function App() {
   const handleSelectFile = async (filename: string) => {
     try {
       const res = await api.getOcrData(currentProject!, filename);
-      setTableData(res.data.data);
+      // OCR 文件两种可能格式:
+      //   { success, data: { items, remarks }, timestamp }  — 成功/已保存
+      //   { success: false, error: "..." }                    — 失败
+      const fileData = res.data.data || res.data;
+      setTableData({
+        items: Array.isArray(fileData.items) ? fileData.items : [],
+        remarks: fileData.remarks || ''
+      });
       setActiveFilename(filename);
       setActiveTab('data');
     } catch (err) { alert("读取数据失败"); }
@@ -75,7 +95,9 @@ function App() {
 
   // ===== 定价表处理 =====
   const handleRateCardEdit = (index: number, field: keyof TableItem, value: string) => {
-    const newItems = [...ratecardTableData.items];
+    const items = ratecardTableData?.items;
+    if (!items || index < 0 || index >= items.length) return;
+    const newItems = [...items];
     newItems[index][field] = value;
     setRatecardTableData({ ...ratecardTableData, items: newItems });
   };
@@ -186,10 +208,29 @@ function App() {
             {ocrFiles.map(f => (
               <div
                 key={f}
-                onClick={() => handleSelectFile(f)}
-                className="cursor-pointer text-slate-400 hover:text-white mb-2 text-sm truncate"
+                className="group flex items-center justify-between cursor-pointer text-slate-400 hover:text-white mb-2 text-sm"
               >
-                {f}
+                <span className="truncate flex-1" onClick={() => handleSelectFile(f)}>{f}</span>
+                <span
+                  className="ml-2 text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition-opacity select-none"
+                  title="删除"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`确定删除 ${f} 吗？`)) return;
+                    try {
+                      await api.deleteOcrFile(currentProject!, f);
+                      fetchOcrFiles(currentProject!);
+                      if (activeFilename === f) {
+                        setActiveFilename(null);
+                        setTableData({ items: [], remarks: '' });
+                      }
+                    } catch (err) {
+                      alert('删除失败');
+                    }
+                  }}
+                >
+                  ×
+                </span>
               </div>
             ))}
           </div>
@@ -236,33 +277,56 @@ function App() {
                       const formData = new FormData();
                       for (let i = 0; i < e.target.files.length; i++) formData.append('files', e.target.files[i]);
 
-                      const res = await api.uploadOcrFiles(currentProject!, formData);
-                      const { task_id } = res.data;
+                      try {
+                        const res = await api.uploadOcrFiles(currentProject!, formData);
+                        const { task_id } = res.data;
 
-                      const interval = setInterval(async () => {
-                        const statusRes = await api.checkTaskStatus(task_id);
+                        pollingRef.current = setInterval(async () => {
+                          try {
+                            const statusRes = await api.checkTaskStatus(task_id);
 
-                        if (statusRes.data.status === 'done') {
-                          clearInterval(interval);
-                          setActiveFilename(statusRes.data.file);
+                            if (statusRes.data.status === 'done') {
+                              clearInterval(pollingRef.current!);
+                              pollingRef.current = null;
+                              setActiveFilename(statusRes.data.file);
 
-                          const rawResult = statusRes.data.result || {};
-                          const actualData = rawResult.data || rawResult;
+                              const rawResult = statusRes.data.result || {};
+                              // OCR 返回: { success, data: { items, remarks }, timestamp }
+                              const actualData = rawResult.data || rawResult;
 
-                          setTableData({
-                            items: Array.isArray(actualData.items) ? actualData.items : [],
-                            remarks: actualData.remarks || ''
-                          });
+                              // OCR 识别失败（如配额超限）
+                              if (rawResult.success === false) {
+                                setLoading(false);
+                                alert("识别失败: " + (rawResult.error || "未知错误"));
+                                fetchOcrFiles(currentProject!);
+                                return;
+                              }
 
-                          fetchOcrFiles(currentProject!);
-                          setLoading(false);
-                          setActiveTab('data');
-                        } else if (statusRes.data.status === 'error') {
-                          clearInterval(interval);
-                          setLoading(false);
-                          alert("识别失败: " + statusRes.data.message);
-                        }
-                      }, 2000);
+                              setTableData({
+                                items: Array.isArray(actualData.items) ? actualData.items : [],
+                                remarks: actualData.remarks || ''
+                              });
+
+                              fetchOcrFiles(currentProject!);
+                              setLoading(false);
+                              setActiveTab('data');
+                            } else if (statusRes.data.status === 'error') {
+                              clearInterval(pollingRef.current!);
+                              pollingRef.current = null;
+                              setLoading(false);
+                              alert("识别失败: " + statusRes.data.message);
+                            }
+                          } catch (pollErr) {
+                            clearInterval(pollingRef.current!);
+                            pollingRef.current = null;
+                            setLoading(false);
+                            alert("轮询状态失败: " + String(pollErr));
+                          }
+                        }, 2000);
+                      } catch (uploadErr) {
+                        setLoading(false);
+                        alert("上传失败: " + String(uploadErr));
+                      }
                     }} />
                   </label>
                   {loading && <p className="mt-4 text-blue-600 font-medium">AI 识别中...</p>}
@@ -270,7 +334,7 @@ function App() {
               ) : (
                 <div>
                   {activeFilename && <h3 className="mb-4 text-lg font-semibold text-gray-800">当前文件: {activeFilename}</h3>}
-                  <DataTable key={activeFilename} items={tableData.items} onEdit={handleEdit} />
+                  <DataTable key={activeFilename} items={tableData?.items ?? []} onEdit={handleEdit} />
                   <button onClick={handleSave} className="mt-6 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">保存修改</button>
                 </div>
               )}
@@ -305,7 +369,7 @@ function App() {
                 </div>
               </div>
 
-              <DataTable items={ratecardTableData.items} onEdit={handleRateCardEdit} />
+              <DataTable items={ratecardTableData?.items ?? []} onEdit={handleRateCardEdit} />
 
               {ratecardTableData.remarks && (
                 <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">

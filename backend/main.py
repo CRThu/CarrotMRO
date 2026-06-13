@@ -48,6 +48,11 @@ async def run_ocr_task(task_id: str, project_name: str, content_list: List[bytes
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, ocr_images, content_list)
 
+        # OCR 识别失败（如 API 限流）时不生成文件
+        if not result.get("success"):
+            tasks_db[task_id] = {"status": "error", "message": result.get("error", "OCR 识别失败")}
+            return
+
         project_dir = PROJECT_BASE_DIR / project_name
         existing_files = list(project_dir.glob("ocr-*.json"))
         new_index = len(existing_files) + 1
@@ -101,7 +106,7 @@ async def get_ratecards():
     return {"ratecards": ratecards}
 
 
-@app.put("/api/create-ratecard/{ratecard_name}")
+@app.post("/api/ratecards/{ratecard_name}")
 async def create_ratecard(ratecard_name: str):
     """创建定价表 JSON 文件"""
     path = get_ratecard_data_path(ratecard_name)
@@ -111,7 +116,7 @@ async def create_ratecard(ratecard_name: str):
     return {"message": "协议定价表创建成功"}
 
 
-@app.get("/api/ratecard-data/{ratecard_name}")
+@app.get("/api/ratecards/{ratecard_name}")
 async def get_ratecard_data(ratecard_name: str):
     """获取定价表 JSON 内容"""
     path = get_ratecard_data_path(ratecard_name)
@@ -120,17 +125,7 @@ async def get_ratecard_data(ratecard_name: str):
     return read_ratecard_data(ratecard_name)
 
 
-@app.post("/api/save-ratecard-data/{ratecard_name}")
-async def save_ratecard_data(ratecard_name: str, data: dict):
-    """保存定价表的编辑数据"""
-    path = get_ratecard_data_path(ratecard_name)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="定价表不存在")
-    write_ratecard_data(ratecard_name, data)
-    return {"message": "保存成功"}
-
-
-@app.post("/api/import-ratecard/{ratecard_name}")
+@app.post("/api/ratecards/{ratecard_name}/import")
 async def import_ratecard(ratecard_name: str, file: UploadFile = File(...)):
     """上传 Excel 文件，解析后写入 JSON"""
     path = get_ratecard_data_path(ratecard_name)
@@ -232,7 +227,17 @@ async def get_projects():
     return {"projects": projects}
 
 
-@app.get("/api/ocr-files/{project_name}")
+@app.get("/api/projects/{project_name}")
+async def get_project_info(project_name: str):
+    """获取项目基本信息（project.json）"""
+    json_path = PROJECT_BASE_DIR / project_name / "project.json"
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="项目不存在")
+    with open(json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.get("/api/projects/{project_name}/ocr-files")
 async def get_ocr_files(project_name: str):
     project_dir = PROJECT_BASE_DIR / project_name
     if not project_dir.exists():
@@ -242,7 +247,7 @@ async def get_ocr_files(project_name: str):
     return {"files": files}
 
 
-@app.put("/api/create-project/{project_name}")
+@app.post("/api/projects/{project_name}")
 async def create_project(project_name: str):
     project_dir = PROJECT_BASE_DIR / project_name
     if project_dir.exists():
@@ -259,7 +264,7 @@ async def create_project(project_name: str):
     return {"message": "项目创建成功", "data": project_info}
 
 
-@app.post("/api/ocr/{project_name}")
+@app.post("/api/projects/{project_name}/ocr")
 async def ocr_images_async(project_name: str, files: List[UploadFile] = File(...)):
     project_dir = PROJECT_BASE_DIR / project_name
     if not project_dir.exists():
@@ -271,14 +276,14 @@ async def ocr_images_async(project_name: str, files: List[UploadFile] = File(...
     return {"task_id": task_id}
 
 
-@app.get("/api/task-status/{task_id}")
+@app.get("/api/tasks/{task_id}")
 async def get_task_status(task_id: str):
     if task_id not in tasks_db:
         return {"status": "not_found"}
     return tasks_db[task_id]
 
 
-@app.post("/api/update-project-ratecard/{project_name}")
+@app.patch("/api/projects/{project_name}/ratecard")
 async def update_project_ratecard(project_name: str, body: dict):
     project_dir = PROJECT_BASE_DIR / project_name
     json_path = project_dir / "project.json"
@@ -292,7 +297,7 @@ async def update_project_ratecard(project_name: str, body: dict):
     return {"message": "定价表更新成功"}
 
 
-@app.get("/api/ocr-data/{project_name}/{filename}")
+@app.get("/api/projects/{project_name}/ocr-files/{filename}")
 async def get_ocr_data(project_name: str, filename: str):
     json_path = PROJECT_BASE_DIR / project_name / filename
     if not json_path.exists():
@@ -302,7 +307,7 @@ async def get_ocr_data(project_name: str, filename: str):
     return data
 
 
-@app.post("/api/save-ocr/{project_name}/{filename}")
+@app.put("/api/projects/{project_name}/ocr-files/{filename}")
 async def save_ocr(project_name: str, filename: str, data: dict):
     json_path = PROJECT_BASE_DIR / project_name / filename
     if not json_path.exists():
@@ -315,6 +320,15 @@ async def save_ocr(project_name: str, filename: str, data: dict):
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
     return {"message": "保存成功"}
+
+
+@app.delete("/api/projects/{project_name}/ocr-files/{filename}")
+async def delete_ocr_file(project_name: str, filename: str):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    os.remove(json_path)
+    return {"message": "删除成功"}
 
 
 # 挂载前端静态文件 (打包后)

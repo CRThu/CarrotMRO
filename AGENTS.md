@@ -31,21 +31,23 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 
 ### 1. 项目管理
 - **功能**: 创建项目、上传报价单图片进行 OCR 识别、查看和编辑识别结果。
-- **API**: 
+- **API**:
   | 方法 | 路径 | 说明 |
   |------|------|------|
   | `GET` | `/api/projects` | 获取所有项目列表 |
-  | `PUT` | `/api/create-project/{name}` | 创建新项目（生成目录 + `project.json`） |
-  | `POST` | `/api/ocr/{name}` | 上传图片启动 OCR 异步识别 |
-  | `GET` | `/api/task-status/{task_id}` | 轮询 OCR 任务状态 |
-  | `GET` | `/api/ocr-files/{name}` | 获取项目下的 OCR 结果文件列表 |
-  | `GET` | `/api/ocr-data/{name}/{file}` | 读取 OCR 结果数据 |
-  | `POST` | `/api/save-ocr/{name}/{file}` | 保存 OCR 表格编辑结果 |
-  | `POST` | `/api/update-project-ratecard/{name}` | 关联/解除关联定价表（JSON body） |
-- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据。
+  | `POST` | `/api/projects/{name}` | 创建新项目（生成目录 + `project.json`） |
+  | `GET` | `/api/projects/{name}` | 获取项目基本信息 |
+  | `PATCH` | `/api/projects/{name}/ratecard` | 关联/解除关联定价表 |
+  | `POST` | `/api/projects/{name}/ocr` | 上传图片启动 OCR 异步识别 |
+  | `GET` | `/api/tasks/{task_id}` | 轮询 OCR 任务状态 |
+  | `GET` | `/api/projects/{name}/ocr-files` | 获取项目下的 OCR 结果文件列表 |
+  | `GET` | `/api/projects/{name}/ocr-files/{file}` | 读取 OCR 结果数据 |
+  | `PUT` | `/api/projects/{name}/ocr-files/{file}` | 保存 OCR 表格编辑结果 |
+  | `DELETE` | `/api/projects/{name}/ocr-files/{file}` | 删除指定的 OCR 结果文件 |
+- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。
 
 ### 2. 协议定价表管理
-- **功能**: 创建和管理协议定价表，可直接在页面上编辑表格数据，也支持从 Excel/CSV 文件导入。
+- **功能**: 创建和管理协议定价表，支持从 Excel/CSV 文件导入数据。导入后可在页面上预览，如需修改需重新导入覆盖。
 - **存储**: 每个定价表对应 `data/ratecard/{名称}.json` 一个文件，不涉及目录嵌套。
 - **数据格式**: `{ items: [{ name, quantity, unit, unit_price }], remarks }`。
 
@@ -53,11 +55,10 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/ratecards` | 获取所有定价表名称列表（扫描 `*.json` 文件） |
-| `PUT` | `/api/create-ratecard/{name}` | 创建新定价表（生成空 JSON 文件） |
-| `GET` | `/api/ratecard-data/{name}` | 获取定价表的表格数据 |
-| `POST` | `/api/save-ratecard-data/{name}` | 保存表格编辑数据（JSON body） |
-| `POST` | `/api/import-ratecard/{name}` | 上传 Excel/CSV 文件并自动解析为表格数据 |
+| `GET` | `/api/ratecards` | 获取所有定价表名称列表 |
+| `POST` | `/api/ratecards/{name}` | 创建新定价表 |
+| `GET` | `/api/ratecards/{name}` | 获取定价表的表格数据 |
+| `POST` | `/api/ratecards/{name}/import` | 上传 Excel/CSV 文件并自动解析覆盖数据 |
 
 导入功能使用 `openpyxl` 解析 `.xlsx/.xls` 文件，支持自动表头识别；也支持 `.csv`（UTF-8）。
 
@@ -69,7 +70,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 
 [定价表模块]
   新建定价表 → 创建 data/ratecard/{name}.json（空）
-  导入 Excel/CSV → 解析写入同一 JSON → 前端 DataTable 展示 ↔ 编辑保存
+  导入 Excel/CSV → 解析写入同一 JSON → 前端 DataTable 预览（如需修改需重新导入）
 ```
 
 ## 运行与开发指南
