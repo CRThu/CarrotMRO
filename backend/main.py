@@ -43,33 +43,55 @@ async def get_projects():
                 projects.append(d.name)
     return {"projects": projects}
 
-# 路由：OCR 接口
+import asyncio
+import uuid
+from typing import Dict, Any
+
+# 在内存中维护任务状态 (实际生产环境建议用 Redis 或 SQLite 替代)
+tasks_db: Dict[str, Dict[str, Any]] = {}
+
+# 真正的 OCR 执行逻辑
+async def run_ocr_task(task_id: str, project_name: str, content_list: List[bytes]):
+    try:
+        # 在子线程运行耗时的同步 OCR 操作，避免阻塞事件循环
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, recognize_photos_base64, content_list)
+        
+        project_dir = PROJECT_BASE_DIR / project_name
+        existing_files = list(project_dir.glob("ocr-*.json"))
+        new_index = len(existing_files) + 1
+        json_filename = f"ocr-{new_index}.json"
+        json_path = project_dir / json_filename
+        
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+            
+        tasks_db[task_id] = {"status": "done", "result": result, "file": json_filename}
+    except Exception as e:
+        tasks_db[task_id] = {"status": "error", "message": str(e)}
+
+# 路由：OCR 提交任务
 @app.post("/api/ocr/{project_name}")
-async def ocr_images(project_name: str, files: List[UploadFile] = File(...)):
-    # 检查项目目录是否存在
+async def ocr_images_async(project_name: str, files: List[UploadFile] = File(...)):
     project_dir = PROJECT_BASE_DIR / project_name
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="项目不存在")
         
-    # 读取所有图片数据
-    content_list = []
-    for file in files:
-        content_list.append(await file.read())
+    content_list = [await file.read() for file in files]
+    task_id = str(uuid.uuid4())
+    tasks_db[task_id] = {"status": "processing"}
     
-    # 调用 photo_ocr 的批量接口
-    result = recognize_photos_base64(content_list)
+    # 在后台启动任务
+    asyncio.create_task(run_ocr_task(task_id, project_name, content_list))
     
-    # 确定文件命名 (ocr-1.json, ocr-2.json, ...)
-    existing_files = list(project_dir.glob("ocr-*.json"))
-    new_index = len(existing_files) + 1
-    json_filename = f"ocr-{new_index}.json"
-    json_path = project_dir / json_filename
-    
-    # 保存结果
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
-        
-    return {"message": "OCR完成", "data": result, "file": str(json_path)}
+    return {"task_id": task_id}
+
+# 路由：查询任务状态
+@app.get("/api/task-status/{task_id}")
+async def get_task_status(task_id: str):
+    if task_id not in tasks_db:
+        return {"status": "not_found"}
+    return tasks_db[task_id]
 
 # 路由：创建新项目
 @app.put("/api/create-project/{project_name}")
