@@ -56,6 +56,27 @@ def invalidate_names(ratecard_name: str):
 
 # ========== 后台 OCR 任务函数（仅项目用） ==========
 
+def _remap_ocr_items(data: dict) -> dict:
+    """将 OCR 结果的英文 key (name/quantity/unit/unit_price) 映射为中文列名"""
+    if "data" in data and isinstance(data["data"], dict):
+        raw = data["data"]
+    else:
+        raw = data
+
+    alias_to_name = {col["alias"]: col["name"] for col in OCR_COLUMNS if col.get("alias")}
+
+    items = raw.get("items", [])
+    remapped = []
+    for item in items:
+        new_item = {}
+        for k, v in item.items():
+            new_item[alias_to_name.get(k, k)] = v
+        remapped.append(new_item)
+
+    raw["items"] = remapped
+    return data
+
+
 async def run_ocr_task(task_id: str, project_name: str, content_list: List[bytes]):
     try:
         loop = asyncio.get_running_loop()
@@ -65,6 +86,8 @@ async def run_ocr_task(task_id: str, project_name: str, content_list: List[bytes
         if not result.get("success"):
             tasks_db[task_id] = {"status": "error", "message": result.get("error", "OCR 识别失败")}
             return
+
+        result = _remap_ocr_items(result)
 
         project_dir = PROJECT_BASE_DIR / project_name
         existing_files = list(project_dir.glob("ocr-*.json"))
@@ -151,8 +174,8 @@ async def import_ratecard(ratecard_name: str, file: UploadFile = File(...)):
     return data
 
 
-@app.post("/api/search")
-async def search_ratecard(body: dict):
+@app.post("/api/match")
+async def match_ratecard(body: dict):
     """模糊搜索定价表 name 列"""
     ratecard_name = body.get("ratecard_name")
     queries = body.get("queries", [])
@@ -266,6 +289,7 @@ async def get_ocr_data(project_name: str, filename: str):
         raise HTTPException(status_code=404, detail="文件不存在")
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    data = _remap_ocr_items(data)
     data["columns"] = OCR_COLUMNS
     return data
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '@/api';
-import { OcrTableData, RateCardTableData } from '@/types';
+import { OcrTableData, RateCardTableData, RateCardColumn, TableItem } from '@/types';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectWorkspace } from '@/components/ProjectWorkspace';
 import { ProjectConfigWorkspace } from '@/components/ProjectConfigWorkspace';
@@ -26,6 +26,7 @@ function App() {
   const [currentView, setCurrentView] = useState<'project' | 'ratecard' | null>(null);
   const [ratecardTableData, setRatecardTableData] = useState<RateCardTableData>({ columns: [], items: [] });
   const [ratecardImporting, setRatecardImporting] = useState(false);
+  const [quotationData, setQuotationData] = useState<{ columns: RateCardColumn[]; items: TableItem[] }>({ columns: [], items: [] });
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
@@ -73,7 +74,7 @@ function App() {
 
   const handleAddRow = (index?: number) => {
     const emptyRow: Record<string, string> = {};
-    tableData.columns.forEach((col) => { emptyRow[col.alias || col.name] = ''; });
+    tableData.columns.forEach((col) => { emptyRow[col.name] = ''; });
     const newItems = [...tableData.items];
     const insertAt = index !== undefined ? index + 1 : newItems.length;
     newItems.splice(insertAt, 0, emptyRow);
@@ -195,6 +196,11 @@ function App() {
     if (!currentProject) return;
     try {
       const res = await api.getQuotationData(currentProject, filename);
+      const data = res.data;
+      setQuotationData({
+        columns: Array.isArray(data.columns) ? data.columns : [],
+        items: Array.isArray(data.items) ? data.items : [],
+      });
       setActiveQuotationFilename(filename);
       setActiveFilename(null);
     } catch (err) {
@@ -210,10 +216,47 @@ function App() {
       fetchQuotationFiles(currentProject);
       if (activeQuotationFilename === filename) {
         setActiveQuotationFilename(null);
+        setQuotationData({ columns: [], items: [] });
       }
     } catch (err) {
       alert('删除报价单失败');
     }
+  };
+
+  const handleQuotationEdit = (index: number, field: string, value: string) => {
+    const items = quotationData.items;
+    if (index < 0 || index >= items.length) return;
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setQuotationData({ ...quotationData, items: newItems });
+  };
+
+  const handleQuotationAddRow = (index?: number) => {
+    const emptyRow: Record<string, string> = {};
+    quotationData.columns.forEach((col) => { emptyRow[col.name] = ''; });
+    const newItems = [...quotationData.items];
+    const insertAt = index !== undefined ? index + 1 : newItems.length;
+    newItems.splice(insertAt, 0, emptyRow);
+    setQuotationData({ ...quotationData, items: newItems });
+  };
+
+  const handleQuotationDeleteRow = (index: number) => {
+    const newItems = quotationData.items.filter((_, i) => i !== index);
+    setQuotationData({ ...quotationData, items: newItems });
+  };
+
+  const handleQuotationSave = async () => {
+    if (!activeQuotationFilename || !currentProject) return;
+    try {
+      await api.saveQuotationData(currentProject, activeQuotationFilename, quotationData);
+      alert('报价单保存成功！');
+    } catch {
+      alert('报价单保存失败');
+    }
+  };
+
+  const handleQuotationDataChange = (items: TableItem[]) => {
+    setQuotationData({ ...quotationData, items });
   };
 
   const handleRateCardImport = async (file: File) => {
@@ -247,6 +290,7 @@ function App() {
     setCurrentView('project');
     setActiveFilename(null);
     setActiveQuotationFilename(null);
+    setQuotationData({ columns: [], items: [] });
   };
 
   const handleToggleProject = (name: string) => {
@@ -294,6 +338,14 @@ function App() {
           <QuotationWorkspace
             currentProject={currentProject}
             activeQuotationFilename={activeQuotationFilename}
+            quotationItems={quotationData.items}
+            ocrFiles={ocrFiles}
+            projectRateCard={projectRateCard}
+            onEdit={handleQuotationEdit}
+            onAddRow={handleQuotationAddRow}
+            onDeleteRow={handleQuotationDeleteRow}
+            onSave={handleQuotationSave}
+            onQuotationDataChange={handleQuotationDataChange}
           />
         )}
 

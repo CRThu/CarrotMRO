@@ -13,8 +13,12 @@ interface DataTableProps {
 }
 
 const renderCell = (item: TableItem, col: RateCardColumn, index: number, onEdit?: DataTableProps['onEdit']) => {
-  const key = col.alias || col.name;
+  const key = col.name;
   const value = item[key] ?? '';
+
+  if (col.computed) {
+    return <span className="text-sm font-medium text-gray-700">{value || '-'}</span>;
+  }
 
   if (col.cellRenderer === 'select' && col.options) {
     return onEdit ? (

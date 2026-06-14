@@ -34,3 +34,7 @@ export const saveQuotationData = (projectName: string, filename: string, data: a
   axios.put(`/api/projects/${projectName}/quotations/${filename}`, data);
 export const deleteQuotation = (projectName: string, filename: string) =>
   axios.delete(`/api/projects/${projectName}/quotations/${filename}`);
+
+// ===== 定价表匹配 =====
+export const matchRateCard = (ratecardName: string, queries: string[], limit?: number) =>
+  axios.post('/api/match', { ratecard_name: ratecardName, queries, limit: limit ?? 1 });

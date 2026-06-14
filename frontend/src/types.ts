@@ -6,6 +6,7 @@ export type RateCardColumn = {
   alias: string | null;
   cellRenderer?: CellRenderer;
   options?: string[];
+  computed?: boolean;
 };
 
 export type TableItem = Record<string, string>;

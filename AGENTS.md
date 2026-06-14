@@ -6,7 +6,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 
 本系统采用前后端分离架构：
 - **后端 (Backend)**: 基于 FastAPI 构建，提供核心 API 接口，负责 OCR 处理、项目管理、定价表管理、数据存储及 Excel 生成。
-- **前端 (Frontend)**: 基于 React 构建，提供用户界面。采用树形侧边栏导航 + 右侧工作区布局，包含项目工作台和定价表编辑器两个独立视图。
+- **前端 (Frontend)**: 基于 React 构建，提供用户界面。采用树形侧边栏导航 + 右侧工作区布局，包含项目工作台、报价单编辑器和定价表查看器三个独立视图。
 
 ## 目录结构
 
@@ -67,7 +67,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `GET` | `/api/projects/{name}/quotations/{file}` | 读取报价单数据 |
   | `PUT` | `/api/projects/{name}/quotations/{file}` | 保存报价单（自动更新 last_edit_time） |
   | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除指定的报价单文件 |
-- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。
+- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。报价单支持可编辑表格（增减行、编辑内容），可从 OCR 导入项目名称和数量，支持从关联定价表模糊匹配填充单价。报价单列定义由前端 `QUOTATION_COLUMNS` 指定。
 
 ### 2. 协议定价表管理
 - **功能**: 创建和管理协议定价表，支持从 Excel/CSV 文件导入数据。导入后可在页面上预览，如需修改需重新导入覆盖。
@@ -118,7 +118,7 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 | `POST` | `/api/ratecards/{name}` | 创建新定价表 |
 | `GET` | `/api/ratecards/{name}` | 获取定价表的表格数据 |
 | `POST` | `/api/ratecards/{name}/import` | 上传 Excel/CSV 文件并自动解析覆盖数据 |
-| `POST` | `/api/search` | 模糊搜索定价表 name 列（支持多关键词） |
+| `POST` | `/api/match` | 模糊匹配定价表 name 列（支持多关键词） |
 
 导入功能使用 `openpyxl` 解析 `.xlsx/.xls` 文件；也支持 `.csv`（UTF-8）。解析时自动识别 `!`/`?` 前缀标记行作为表头。
 
@@ -135,15 +135,21 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 
 ```
 [项目模块]
-  上传图片 → OCR 异步识别 → 保存 ocr-{n}.json → 前端 DataTable 展示 ↔ 编辑保存
+  上传图片 → OCR 异步识别 → 英文 key 映射为中文列名 → 保存 ocr-{n}.json → 前端 DataTable 展示 ↔ 编辑保存
 
 [报价单模块]
   点击"+"创建报价单 → 生成 quotation-{n}.json（含 created_at、last_edit_time）→ 前端 QuotationWorkspace 展示
+  从 OCR 导入 → 项目名称/数量/单价 → 可选从定价表模糊匹配 top5 → 手动选择填充单价
 
 [定价表模块]
   新建定价表 → 创建 data/ratecard/{name}.json（空）
   导入 Excel/CSV → 解析写入同一 JSON → 前端 DataTable 预览（如需修改需重新导入）
 ```
+
+## 数据规范
+
+- **统一 key**: 所有 items 的 key 统一使用 `col.name`（中文列名），前后端一致。`col.alias` 仅用于跨表匹配（如报价单名称匹配定价表时的关联）。
+- **OCR 数据映射**: Gemini API 返回英文 key（`name`/`quantity`/`unit`/`unit_price`），后端 `_remap_ocr_items()` 在存储和读取时映射为中文列名（`项目`/`数量`/`单位`/`单价`），确保与 `OCR_COLUMNS` 一致。
 
 ## 运行与开发指南
 1.  **环境管理**:
