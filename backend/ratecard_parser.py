@@ -155,3 +155,25 @@ if __name__ == "__main__":
         tag = "!" if col["strict"] else "?"
         alias_tag = f" (alias={col['alias']})" if col["alias"] else ""
         print(f"  {tag}{col['name']}{alias_tag}")
+
+
+def extract_names(columns: list[dict], items: list[dict]) -> list[str]:
+    """从定价表数据中提取 name 列的值"""
+    name_col = None
+    for col in columns:
+        if col.get("alias") == "name":
+            name_col = col["name"]
+            break
+    if name_col is None:
+        for col in columns:
+            if "名称" in col["name"]:
+                name_col = col["name"]
+                break
+    if name_col is None and columns:
+        for col in columns:
+            if col.get("strict"):
+                name_col = col["name"]
+                break
+    if name_col is None:
+        return []
+    return [item[name_col] for item in items if name_col in item]

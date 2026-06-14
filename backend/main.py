@@ -11,7 +11,8 @@ from typing import List, Dict, Any
 from pathlib import Path
 from config import settings
 from photo_ocr import ocr_images
-from ratecard_parser import parse_ratecard_file
+from ratecard_parser import parse_ratecard_file, extract_names
+from match import match_names
 
 app = FastAPI()
 
@@ -44,6 +45,13 @@ OCR_COLUMNS = [
     {"name": "单位", "strict": True, "alias": None},
     {"name": "单价", "strict": True, "alias": None},
 ]
+
+# 定价表 name 列缓存
+_names_cache: Dict[str, List[str]] = {}
+
+
+def invalidate_names(ratecard_name: str):
+    _names_cache.pop(ratecard_name, None)
 
 
 # ========== 后台 OCR 任务函数（仅项目用） ==========
@@ -139,7 +147,34 @@ async def import_ratecard(ratecard_name: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
     write_ratecard_data(ratecard_name, data)
+    invalidate_names(ratecard_name)
     return data
+
+
+@app.post("/api/search")
+async def search_ratecard(body: dict):
+    """模糊搜索定价表 name 列"""
+    ratecard_name = body.get("ratecard_name")
+    queries = body.get("queries", [])
+    limit = body.get("limit", 5)
+
+    if not ratecard_name:
+        raise HTTPException(status_code=400, detail="ratecard_name 不能为空")
+    if not queries:
+        raise HTTPException(status_code=400, detail="queries 不能为空")
+
+    path = get_ratecard_data_path(ratecard_name)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="定价表不存在")
+
+    names = _names_cache.get(ratecard_name)
+    if names is None:
+        data = read_ratecard_data(ratecard_name)
+        names = extract_names(data.get("columns", []), data.get("items", []))
+        _names_cache[ratecard_name] = names
+
+    results = match_names(names, queries, limit=limit)
+    return results
 
 
 # ========== 路由：项目 ==========

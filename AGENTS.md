@@ -16,10 +16,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   ├── main.py         # 核心 API 路由与服务入口
 │   ├── config.py       # 配置管理（环境变量、目录路径）
 │   ├── photo_ocr.py    # OCR 识别逻辑封装
-│   ├── match.py        # 项目名称匹配逻辑
-│   ├── file_utils.py   # 文件读写辅助工具
-│   ├── ratecard_parser.py # 定价表 Excel/CSV 解析器
-│   ├── search.py       # 模糊搜索工具（独立运行）
+│   ├── match.py        # 模糊搜索工具（match_names）
+
+│   ├── ratecard_parser.py # 定价表 Excel/CSV 解析器（含 extract_names）
 │   ├── pyproject.toml  # Python 依赖配置
 │   └── uv.lock         # 依赖锁文件
 ├── frontend/           # 前端 React + Vite 应用
@@ -112,8 +111,18 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 | `POST` | `/api/ratecards/{name}` | 创建新定价表 |
 | `GET` | `/api/ratecards/{name}` | 获取定价表的表格数据 |
 | `POST` | `/api/ratecards/{name}/import` | 上传 Excel/CSV 文件并自动解析覆盖数据 |
+| `POST` | `/api/search` | 模糊搜索定价表 name 列（支持多关键词） |
 
 导入功能使用 `openpyxl` 解析 `.xlsx/.xls` 文件；也支持 `.csv`（UTF-8）。解析时自动识别 `!`/`?` 前缀标记行作为表头。
+
+**搜索接口参数**:
+```json
+{
+  "ratecard_name": "定价表名称",
+  "queries": ["搜索词1", "搜索词2"],
+  "limit": 5
+}
+```
 
 ## 数据流向
 
@@ -143,6 +152,10 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 - 在进行任何涉及项目结构、API 接口、核心逻辑或数据流向的变更后，必须同步检查并更新本 `AGENTS.md` 文件。
 - **编辑警示**: 在使用 `edit` 工具修改代码时，请确保 `oldText` 块精准且最小化，严禁通过包含大量无关的前后文来增加匹配难度，防止误伤不相关的代码区域。
 - 严禁在文档中保留过时的路径、名称或逻辑描述。
+
+## 开发规范
+- **禁止读取 data/ 目录**: agent 禁止读取或列出 `data/` 目录下的任何文件，该目录包含用户实际数据，仅由运行时程序访问。
+- **禁止读取 .env 文件**: agent 禁止读取 `.env` 文件，该文件包含敏感配置信息（API 密钥、数据库连接等）。
 
 ## 用户偏好
 
