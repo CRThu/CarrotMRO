@@ -1,4 +1,6 @@
-import { TableItem } from '../types';
+import { TableItem } from '@/types';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 
 interface DataTableProps {
   items: TableItem[];
@@ -7,33 +9,33 @@ interface DataTableProps {
 
 export const DataTable = ({ items, onEdit }: DataTableProps) => {
   return (
-    <table className="w-full border-collapse mt-4">
-      <thead>
-        <tr className="border-b-2 border-gray-200">
-          <th className="p-3 text-left">项目</th>
-          <th className="p-3 text-left">数量</th>
-          <th className="p-3 text-left">单位</th>
-          <th className="p-3 text-left">单价</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>项目</TableHead>
+          <TableHead>数量</TableHead>
+          <TableHead>单位</TableHead>
+          <TableHead>单价</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {items.map((item, i) => (
-          <tr key={i} className="border-b border-gray-100">
-            <td className="p-2">
-              <input value={item.name} onChange={(e) => onEdit(i, 'name', e.target.value)} className="w-full p-2 border rounded" />
-            </td>
-            <td className="p-2">
-              <input value={item.quantity} onChange={(e) => onEdit(i, 'quantity', e.target.value)} className="w-full p-2 border rounded" />
-            </td>
-            <td className="p-2">
-              <input value={item.unit} onChange={(e) => onEdit(i, 'unit', e.target.value)} className="w-full p-2 border rounded" />
-            </td>
-            <td className="p-2">
-              <input value={item.unit_price || ''} onChange={(e) => onEdit(i, 'unit_price', e.target.value)} className="w-full p-2 border rounded" />
-            </td>
-          </tr>
+          <TableRow key={i}>
+            <TableCell>
+              <Input value={item.name} onChange={(e) => onEdit(i, 'name', e.target.value)} />
+            </TableCell>
+            <TableCell>
+              <Input value={item.quantity} onChange={(e) => onEdit(i, 'quantity', e.target.value)} />
+            </TableCell>
+            <TableCell>
+              <Input value={item.unit} onChange={(e) => onEdit(i, 'unit', e.target.value)} />
+            </TableCell>
+            <TableCell>
+              <Input value={item.unit_price || ''} onChange={(e) => onEdit(i, 'unit_price', e.target.value)} />
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
+      </TableBody>
+    </Table>
   );
 };
