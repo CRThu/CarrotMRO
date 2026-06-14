@@ -1,6 +1,6 @@
 # CarrotMRO 项目说明
 
-CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含多个业务模块。当前系统包含**项目管理**（含 OCR 图片识别报价单）和**协议定价表管理**两大核心模块。
+CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含多个业务模块。当前系统包含**项目管理**（含 OCR 图片识别报价单、报价单管理）和**协议定价表管理**两大核心模块。
 
 ## 系统架构
 
@@ -29,8 +29,10 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   │   └── components/
 │   │       ├── Sidebar.tsx         # 侧边栏导航组件
 │   │       ├── SidebarTree.tsx     # 树形导航基础组件（SidebarSection、TreeItem）
-│   │       ├── ProjectWorkspace.tsx # 项目工作区
+│   │       ├── ProjectWorkspace.tsx # 项目工作区（OCR 数据编辑）
+│   │       ├── ProjectConfigWorkspace.tsx # 项目配置工作区（关联定价表）
 │   │       ├── RateCardWorkspace.tsx # 定价表工作区
+│   │       ├── QuotationWorkspace.tsx # 报价单工作区
 │   │       ├── DataTable.tsx       # 通用数据表格组件
 │   │       └── ui/                 # shadcn/ui 基础组件
 │   └── vite.config.js  # Vite 配置（含 /api 代理）
@@ -46,7 +48,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 ## 核心功能
 
 ### 1. 项目管理
-- **功能**: 创建项目、上传报价单图片进行 OCR 识别、查看和编辑识别结果。
+- **功能**: 创建项目、上传报价单图片进行 OCR 识别、查看和编辑识别结果、管理报价单。
 - **API**:
   | 方法 | 路径 | 说明 |
   |------|------|------|
@@ -60,7 +62,12 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `GET` | `/api/projects/{name}/ocr-files/{file}` | 读取 OCR 结果数据 |
   | `PUT` | `/api/projects/{name}/ocr-files/{file}` | 保存 OCR 表格编辑结果 |
   | `DELETE` | `/api/projects/{name}/ocr-files/{file}` | 删除指定的 OCR 结果文件 |
-- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。
+  | `GET` | `/api/projects/{name}/quotations` | 获取项目下的报价单文件列表 |
+  | `POST` | `/api/projects/{name}/quotations` | 创建新报价单（自动命名 quotation-{n}.json） |
+  | `GET` | `/api/projects/{name}/quotations/{file}` | 读取报价单数据 |
+  | `PUT` | `/api/projects/{name}/quotations/{file}` | 保存报价单（自动更新 last_edit_time） |
+  | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除指定的报价单文件 |
+- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。
 
 ### 2. 协议定价表管理
 - **功能**: 创建和管理协议定价表，支持从 Excel/CSV 文件导入数据。导入后可在页面上预览，如需修改需重新导入覆盖。
@@ -130,6 +137,9 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 [项目模块]
   上传图片 → OCR 异步识别 → 保存 ocr-{n}.json → 前端 DataTable 展示 ↔ 编辑保存
 
+[报价单模块]
+  点击"+"创建报价单 → 生成 quotation-{n}.json（含 created_at、last_edit_time）→ 前端 QuotationWorkspace 展示
+
 [定价表模块]
   新建定价表 → 创建 data/ratecard/{name}.json（空）
   导入 Excel/CSV → 解析写入同一 JSON → 前端 DataTable 预览（如需修改需重新导入）
@@ -178,3 +188,5 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 
 ### 开发原则
 - **单一事实来源 (Single Source of Truth)**: 同一数据的定义必须只存在于一个地方。例如列定义、字段映射等配置，后端定义一次，前端通过 API 获取使用，禁止前端再维护一份副本。
+- **最小改动原则**: 引入新依赖或重构时，优先选择与现有架构兼容的方案，减少上下游文件的连锁修改。新功能通过扩展配置（如声明式 props）实现，而非修改已有组件的内部逻辑。改动范围应局限在必要文件，避免波及不相关的模块。
+- **显式优于隐式**: 数据流和组件行为必须可追踪。优先使用显式 props 传递和配置声明，避免隐式约定（如依赖内部状态推断、中间层不可见转换）。组件职责单一，不隐藏副作用，不依赖调用顺序。

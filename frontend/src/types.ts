@@ -1,7 +1,11 @@
+export type CellRenderer = 'input' | 'select';
+
 export type RateCardColumn = {
   name: string;
   strict: boolean;
   alias: string | null;
+  cellRenderer?: CellRenderer;
+  options?: string[];
 };
 
 export type TableItem = Record<string, string>;

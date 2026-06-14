@@ -40,10 +40,10 @@ tasks_db: Dict[str, Dict[str, Any]] = {}
 TABLE_FIELDS = ["name", "quantity", "unit", "unit_price"]  # OCR 输出字段
 
 OCR_COLUMNS = [
-    {"name": "项目", "strict": True, "alias": None},
-    {"name": "数量", "strict": True, "alias": None},
-    {"name": "单位", "strict": True, "alias": None},
-    {"name": "单价", "strict": True, "alias": None},
+    {"name": "项目", "strict": True, "alias": "name"},
+    {"name": "数量", "strict": True, "alias": "quantity"},
+    {"name": "单位", "strict": True, "alias": "unit"},
+    {"name": "单价", "strict": True, "alias": "unit_price"},
 ]
 
 # 定价表 name 列缓存
@@ -287,6 +287,68 @@ async def save_ocr(project_name: str, filename: str, data: dict):
 
 @app.delete("/api/projects/{project_name}/ocr-files/{filename}")
 async def delete_ocr_file(project_name: str, filename: str):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    os.remove(json_path)
+    return {"message": "删除成功"}
+
+
+# ========== 路由：报价单 ==========
+
+@app.get("/api/projects/{project_name}/quotations")
+async def get_quotations(project_name: str):
+    project_dir = PROJECT_BASE_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="项目不存在")
+    files = [f.name for f in project_dir.glob("quotation-*.json")]
+    files.sort(key=lambda x: int(x.split('-')[1].split('.')[0]))
+    return {"files": files}
+
+
+@app.post("/api/projects/{project_name}/quotations")
+async def create_quotation(project_name: str):
+    project_dir = PROJECT_BASE_DIR / project_name
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="项目不存在")
+    existing_files = list(project_dir.glob("quotation-*.json"))
+    new_index = len(existing_files) + 1
+    json_filename = f"quotation-{new_index}.json"
+    json_path = project_dir / json_filename
+    now = datetime.now().isoformat()
+    quotation_data = {
+        "columns": [],
+        "items": [],
+        "created_at": now,
+        "last_edit_time": now
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(quotation_data, f, ensure_ascii=False, indent=2)
+    return {"message": "报价单创建成功", "file": json_filename}
+
+
+@app.get("/api/projects/{project_name}/quotations/{filename}")
+async def get_quotation_data(project_name: str, filename: str):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    with open(json_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.put("/api/projects/{project_name}/quotations/{filename}")
+async def save_quotation(project_name: str, filename: str, data: dict):
+    json_path = PROJECT_BASE_DIR / project_name / filename
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    data["last_edit_time"] = datetime.now().isoformat()
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"message": "保存成功"}
+
+
+@app.delete("/api/projects/{project_name}/quotations/{filename}")
+async def delete_quotation(project_name: str, filename: str):
     json_path = PROJECT_BASE_DIR / project_name / filename
     if not json_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")

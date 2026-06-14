@@ -24,3 +24,13 @@ export const getRateCardData = (ratecardName: string) => axios.get(`/api/ratecar
 /** 导入 Excel / CSV 文件到定价表 */
 export const importRateCardFile = (ratecardName: string, formData: FormData) =>
   axios.post(`/api/ratecards/${ratecardName}/import`, formData);
+
+// ===== 报价单相关 =====
+export const getQuotations = (projectName: string) => axios.get(`/api/projects/${projectName}/quotations`);
+export const createQuotation = (projectName: string) => axios.post(`/api/projects/${projectName}/quotations`);
+export const getQuotationData = (projectName: string, filename: string) =>
+  axios.get(`/api/projects/${projectName}/quotations/${filename}`);
+export const saveQuotationData = (projectName: string, filename: string, data: any) =>
+  axios.put(`/api/projects/${projectName}/quotations/${filename}`, data);
+export const deleteQuotation = (projectName: string, filename: string) =>
+  axios.delete(`/api/projects/${projectName}/quotations/${filename}`);

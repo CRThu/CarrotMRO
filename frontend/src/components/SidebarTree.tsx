@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ChevronRight, ChevronDown, Plus, Trash2, Folder, FolderOpen, FileText, Upload, ScanLine } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Trash2, Folder, FolderOpen, FileText, Upload, ScanLine, Receipt, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface SidebarSectionProps {
@@ -90,6 +90,8 @@ interface TreeItemProps {
   expanded?: boolean;
   onToggleExpand?: () => void;
   onUpload?: (files: FileList) => void;
+  onCreate?: () => void;
+  onSettings?: () => void;
   children?: React.ReactNode;
   icon?: React.ReactNode;
 }
@@ -103,6 +105,8 @@ export function TreeItem({
   expanded,
   onToggleExpand,
   onUpload,
+  onCreate,
+  onSettings,
   children,
   icon,
 }: TreeItemProps) {
@@ -149,6 +153,18 @@ export function TreeItem({
             </span>
           </>
         )}
+        {onCreate && (
+          <span
+            className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity select-none flex-shrink-0"
+            title="新建"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreate();
+            }}
+          >
+            <Plus size={14} />
+          </span>
+        )}
         {onDelete && (
           <span
             className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition-opacity select-none flex-shrink-0"
@@ -161,10 +177,22 @@ export function TreeItem({
             <Trash2 size={14} />
           </span>
         )}
+        {onSettings && (
+          <span
+            className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity select-none flex-shrink-0"
+            title="项目设置"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSettings();
+            }}
+          >
+            <Settings size={14} />
+          </span>
+        )}
       </div>
       {expandable && expanded && children && <div className="ml-4">{children}</div>}
     </div>
   );
 }
 
-export { Folder, FolderOpen, FileText, ScanLine };
+export { Folder, FolderOpen, FileText, ScanLine, Receipt, Settings };

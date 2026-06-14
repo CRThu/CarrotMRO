@@ -8,7 +8,6 @@ interface RateCardWorkspaceProps {
   currentRateCard: string;
   ratecardTableData: RateCardTableData;
   importing: boolean;
-  onEdit: (index: number, field: string, value: string) => void;
   onImport: (file: File) => void;
 }
 
@@ -16,7 +15,6 @@ export function RateCardWorkspace({
   currentRateCard,
   ratecardTableData,
   importing,
-  onEdit,
   onImport,
 }: RateCardWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +53,6 @@ export function RateCardWorkspace({
           <DataTable
             columns={ratecardTableData?.columns ?? []}
             items={ratecardTableData?.items ?? []}
-            onEdit={onEdit}
           />
         </CardContent>
       </Card>
