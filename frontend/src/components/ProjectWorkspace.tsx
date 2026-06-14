@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 interface ProjectWorkspaceProps {
   currentProject: string;
   activeFilename: string | null;
-  loading: boolean;
   tableData: OcrTableData;
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow?: (index?: number) => void;
@@ -17,7 +16,6 @@ interface ProjectWorkspaceProps {
 export function ProjectWorkspace({
   currentProject,
   activeFilename,
-  loading,
   tableData,
   onEdit,
   onAddRow,
@@ -30,7 +28,6 @@ export function ProjectWorkspace({
 
       <Card>
         <CardContent className="pt-6">
-          {loading && <p className="mb-4 text-blue-600 font-medium">AI 识别中...</p>}
           {activeFilename && <h3 className="mb-4 text-lg font-semibold text-gray-800">当前文件: {activeFilename}</h3>}
           <DataTable
             key={activeFilename}

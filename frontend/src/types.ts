@@ -11,6 +11,11 @@ export type RateCardColumn = {
 
 export type TableItem = Record<string, string>;
 
+export type QuotationItem = TableItem & {
+  _matchStatus?: 'pending' | 'matched' | 'custom';
+  '清单名称'?: string;
+};
+
 export type OcrTableData = {
   columns: RateCardColumn[];
   items: TableItem[];

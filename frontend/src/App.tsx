@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '@/api';
-import { OcrTableData, RateCardTableData, RateCardColumn, TableItem } from '@/types';
+import { OcrTableData, RateCardTableData, RateCardColumn, TableItem, QuotationItem } from '@/types';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectWorkspace } from '@/components/ProjectWorkspace';
 import { ProjectConfigWorkspace } from '@/components/ProjectConfigWorkspace';
 import { RateCardWorkspace } from '@/components/RateCardWorkspace';
 import { QuotationWorkspace } from '@/components/QuotationWorkspace';
+import { TaskNotification } from '@/components/TaskNotification';
 
 function App() {
   const [projects, setProjects] = useState<string[]>([]);
@@ -18,7 +19,6 @@ function App() {
   const [activeFilename, setActiveFilename] = useState<string | null>(null);
   const [activeQuotationFilename, setActiveQuotationFilename] = useState<string | null>(null);
   const [tableData, setTableData] = useState<OcrTableData>({ columns: [], items: [], remarks: '' });
-  const [loading, setLoading] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['projects', 'ratecards']));
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [expandedOcr, setExpandedOcr] = useState<string | null>(null);
@@ -26,7 +26,8 @@ function App() {
   const [currentView, setCurrentView] = useState<'project' | 'ratecard' | null>(null);
   const [ratecardTableData, setRatecardTableData] = useState<RateCardTableData>({ columns: [], items: [] });
   const [ratecardImporting, setRatecardImporting] = useState(false);
-  const [quotationData, setQuotationData] = useState<{ columns: RateCardColumn[]; items: TableItem[] }>({ columns: [], items: [] });
+  const [quotationData, setQuotationData] = useState<{ columns: RateCardColumn[]; items: QuotationItem[] }>({ columns: [], items: [] });
+  const [ocrTaskStatus, setOcrTaskStatus] = useState<{ status: 'processing' | 'done' | 'error'; message?: string } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
@@ -59,6 +60,18 @@ function App() {
       }).catch(() => setRatecardTableData({ columns: [], items: [] }));
     }
   }, [currentRateCard]);
+
+  useEffect(() => {
+    if (currentView === 'project' && projectRateCard) {
+      api.getRateCardData(projectRateCard).then(res => {
+        const d = res.data;
+        setRatecardTableData({
+          columns: Array.isArray(d.columns) ? d.columns : [],
+          items: Array.isArray(d.items) ? d.items : [],
+        });
+      }).catch(() => setRatecardTableData({ columns: [], items: [] }));
+    }
+  }, [currentView, projectRateCard]);
 
   useEffect(() => {
     return () => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; } };
@@ -110,7 +123,7 @@ function App() {
   };
 
   const handleOcrUpload = async (files: FileList) => {
-    setLoading(true);
+    setOcrTaskStatus({ status: 'processing' });
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
 
@@ -132,8 +145,7 @@ function App() {
             const actualData = rawResult.data || rawResult;
 
             if (rawResult.success === false) {
-              setLoading(false);
-              alert("识别失败: " + (rawResult.error || "未知错误"));
+              setOcrTaskStatus({ status: 'error', message: rawResult.error || '未知错误' });
               fetchOcrFiles(currentProject!);
               return;
             }
@@ -145,23 +157,20 @@ function App() {
             });
 
             fetchOcrFiles(currentProject!);
-            setLoading(false);
+            setOcrTaskStatus({ status: 'done' });
           } else if (statusRes.data.status === 'error') {
             clearInterval(pollingRef.current!);
             pollingRef.current = null;
-            setLoading(false);
-            alert("识别失败: " + statusRes.data.message);
+            setOcrTaskStatus({ status: 'error', message: statusRes.data.message });
           }
         } catch (pollErr) {
           clearInterval(pollingRef.current!);
           pollingRef.current = null;
-          setLoading(false);
-          alert("轮询状态失败: " + String(pollErr));
+          setOcrTaskStatus({ status: 'error', message: '轮询状态失败: ' + String(pollErr) });
         }
       }, 2000);
     } catch (uploadErr) {
-      setLoading(false);
-      alert("上传失败: " + String(uploadErr));
+      setOcrTaskStatus({ status: 'error', message: '上传失败: ' + String(uploadErr) });
     }
   };
 
@@ -197,9 +206,14 @@ function App() {
     try {
       const res = await api.getQuotationData(currentProject, filename);
       const data = res.data;
+      const items: QuotationItem[] = (Array.isArray(data.items) ? data.items : []).map((item: TableItem) => ({
+        ...item,
+        _matchStatus: item._matchStatus || 'pending',
+        '清单名称': item['清单名称'] || '',
+      }));
       setQuotationData({
         columns: Array.isArray(data.columns) ? data.columns : [],
-        items: Array.isArray(data.items) ? data.items : [],
+        items,
       });
       setActiveQuotationFilename(filename);
       setActiveFilename(null);
@@ -232,7 +246,7 @@ function App() {
   };
 
   const handleQuotationAddRow = (index?: number) => {
-    const emptyRow: Record<string, string> = {};
+    const emptyRow: QuotationItem = { _matchStatus: 'pending', '清单名称': '' };
     quotationData.columns.forEach((col) => { emptyRow[col.name] = ''; });
     const newItems = [...quotationData.items];
     const insertAt = index !== undefined ? index + 1 : newItems.length;
@@ -255,7 +269,7 @@ function App() {
     }
   };
 
-  const handleQuotationDataChange = (items: TableItem[]) => {
+  const handleQuotationDataChange = (items: QuotationItem[]) => {
     setQuotationData({ ...quotationData, items });
   };
 
@@ -341,6 +355,7 @@ function App() {
             quotationItems={quotationData.items}
             ocrFiles={ocrFiles}
             projectRateCard={projectRateCard}
+            ratecardTableData={ratecardTableData}
             onEdit={handleQuotationEdit}
             onAddRow={handleQuotationAddRow}
             onDeleteRow={handleQuotationDeleteRow}
@@ -353,7 +368,6 @@ function App() {
           <ProjectWorkspace
             currentProject={currentProject}
             activeFilename={activeFilename}
-            loading={loading}
             tableData={tableData}
             onEdit={handleEdit}
             onAddRow={handleAddRow}
@@ -387,6 +401,12 @@ function App() {
           <h1 className="text-3xl font-light mb-8 text-gray-700">请从左侧选择一个项目或协议定价表</h1>
         )}
       </main>
+
+      <TaskNotification
+        status={ocrTaskStatus}
+        labels={{ processing: 'AI 识别中...', done: '识别完成', error: '识别失败' }}
+        onDismiss={() => setOcrTaskStatus(null)}
+      />
     </div>
   );
 }

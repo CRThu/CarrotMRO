@@ -1,33 +1,44 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DataTable } from '@/components/DataTable';
-import { RateCardColumn, TableItem } from '@/types';
+import { MatchPopover } from '@/components/MatchPopover';
+import { RateCardColumn, RateCardTableData, TableItem } from '@/types';
 import * as api from '@/api';
-import { Save, Upload, DollarSign, Check, X } from 'lucide-react';
+import { Save, Upload } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Plus, Trash2 } from 'lucide-react';
 
 interface MatchCandidate {
   name: string;
-  price: string;
   score: number;
+  columns: string[];
+  values: string[];
+}
+
+interface QuotationItem extends TableItem {
+  _matchStatus?: 'pending' | 'matched' | 'custom';
+  '清单名称'?: string;
 }
 
 interface QuotationWorkspaceProps {
   currentProject: string;
   activeQuotationFilename: string;
-  quotationItems: TableItem[];
+  quotationItems: QuotationItem[];
   ocrFiles: string[];
   projectRateCard: string | null;
+  ratecardTableData: RateCardTableData;
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (index: number) => void;
   onSave: () => void;
-  onQuotationDataChange: (items: TableItem[]) => void;
+  onQuotationDataChange: (items: QuotationItem[]) => void;
 }
 
 const QUOTATION_DISPLAY_COLUMNS: RateCardColumn[] = [
   { name: '序号', strict: false, alias: null, computed: true },
   { name: '项目名称', strict: true, alias: 'name' },
+  { name: '清单名称', strict: false, alias: null, computed: true },
   { name: '单位', strict: false, alias: null },
   { name: '数量', strict: true, alias: 'quantity' },
   { name: '单价', strict: true, alias: 'unit_price' },
@@ -48,6 +59,7 @@ export function QuotationWorkspace({
   quotationItems,
   ocrFiles,
   projectRateCard,
+  ratecardTableData,
   onEdit,
   onAddRow,
   onDeleteRow,
@@ -57,9 +69,8 @@ export function QuotationWorkspace({
   const [selectedOcrFile, setSelectedOcrFile] = useState<string>('');
   const [importUnitPrice, setImportUnitPrice] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [matchPricesLoading, setMatchPricesLoading] = useState(false);
-  const [matchResults, setMatchResults] = useState<Record<number, MatchCandidate[]>>({});
-  const [showMatchPanel, setShowMatchPanel] = useState(false);
+  const [matchCandidatesMap, setMatchCandidatesMap] = useState<Record<number, MatchCandidate[]>>({});
+  const [matchLoadingMap, setMatchLoadingMap] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (ocrFiles.length > 0 && !selectedOcrFile) {
@@ -82,94 +93,85 @@ export function QuotationWorkspace({
       const fileData = raw.data || raw;
       const ocrItems: TableItem[] = Array.isArray(fileData.items) ? fileData.items : [];
 
-      const newItems: TableItem[] = ocrItems.map((ocrItem: TableItem) => ({
+      const newItems: QuotationItem[] = ocrItems.map((ocrItem: TableItem) => ({
         '项目名称': ocrItem['项目'] || '',
         '单位': ocrItem['单位'] || '',
         '数量': ocrItem['数量'] || '',
         '单价': importUnitPrice ? (ocrItem['单价'] || '') : '',
         '备注': '',
+        _matchStatus: 'pending',
+        '清单名称': '',
       }));
 
       onQuotationDataChange(newItems);
-      setShowMatchPanel(false);
-      setMatchResults({});
+      setMatchCandidatesMap({});
     } catch {
       alert('导入 OCR 数据失败');
     }
     setImporting(false);
   };
 
-  const handleMatchPrices = async () => {
-    if (!projectRateCard || quotationItems.length === 0) return;
-    setMatchPricesLoading(true);
+  const fetchCandidatesForItem = async (itemIndex: number, itemName: string) => {
+    if (!projectRateCard || !itemName) return;
+    setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: true }));
     try {
-      const names = quotationItems.map(item => item['项目名称'] || '').filter(Boolean);
-      if (names.length === 0) {
-        alert('没有可匹配的项目名称');
-        setMatchPricesLoading(false);
-        return;
-      }
+      const searchRes = await api.matchRateCard(projectRateCard, [itemName], 5);
+      const matches: [string, number][] = searchRes.data[itemName] || [];
 
-      const searchRes = await api.matchRateCard(projectRateCard, names, 5);
-      const searchResults: Record<string, [string, number][]> = searchRes.data;
-
-      const rcDataRes = await api.getRateCardData(projectRateCard);
-      const rcData = rcDataRes.data;
-      const rcColumns = rcData.columns || [];
-      const rcItems = rcData.items || [];
+      const rcColumns = ratecardTableData.columns || [];
+      const rcItems = ratecardTableData.items || [];
 
       let nameCol: string | null = null;
-      let priceCol: string | null = null;
       for (const col of rcColumns) {
-        if (col.alias === 'name') nameCol = col.name;
-        if (col.name.includes('单价') || col.name.includes('价格')) priceCol = col.name;
+        if (col.alias === 'name') { nameCol = col.name; break; }
       }
+      if (!nameCol) { setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: false })); return; }
 
-      if (!nameCol || !priceCol) {
-        alert('定价表缺少名称列或单价列');
-        setMatchPricesLoading(false);
-        return;
-      }
+      const displayCols = rcColumns.filter((c: any) => c.alias !== 'name');
+      const colNames = displayCols.map((c: any) => c.name);
 
-      const results: Record<number, MatchCandidate[]> = {};
-      quotationItems.forEach((item, idx) => {
-        const itemName = item['项目名称'] || '';
-        const matches = searchResults[itemName];
-        if (matches && matches.length > 0) {
-          const candidates: MatchCandidate[] = matches
-            .map(([matchedName, score]) => {
-              const rcItem = rcItems.find((ri: any) => ri[nameCol!] === matchedName);
-              return {
-                name: matchedName,
-                price: rcItem && rcItem[priceCol!] ? String(rcItem[priceCol!]) : '',
-                score,
-              };
-            })
-            .filter(c => c.price);
-          if (candidates.length > 0) {
-            results[idx] = candidates;
-          }
-        }
-      });
+      const candidates: MatchCandidate[] = matches
+        .map(([matchedName, score]) => {
+          const rcItem = rcItems.find((ri: any) => ri[nameCol!] === matchedName);
+          if (!rcItem) return null;
+          const values = displayCols.map((c: any) => String(rcItem[c.name] ?? ''));
+          return { name: matchedName, score, columns: colNames, values };
+        })
+        .filter(Boolean) as MatchCandidate[];
 
-      setMatchResults(results);
-      setShowMatchPanel(true);
+      setMatchCandidatesMap(prev => ({ ...prev, [itemIndex]: candidates }));
     } catch {
-      alert('匹配单价失败');
+      setMatchCandidatesMap(prev => ({ ...prev, [itemIndex]: [] }));
     }
-    setMatchPricesLoading(false);
+    setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: false }));
   };
 
-  const handleSelectMatch = (itemIndex: number, price: string) => {
-    onEdit(itemIndex, '单价', price);
+  const handleSelectCandidate = (itemIndex: number, candidate: MatchCandidate) => {
+    const item = quotationItems[itemIndex];
+    const priceIdx = candidate.columns.findIndex(c => c.includes('单价') || c.includes('价格'));
+    const newItems = [...quotationItems];
+    newItems[itemIndex] = {
+      ...item,
+      '单价': priceIdx >= 0 ? candidate.values[priceIdx] : '',
+      _matchStatus: 'matched' as const,
+      '清单名称': candidate.name,
+    };
+    onQuotationDataChange(newItems);
   };
 
-  const handleCloseMatchPanel = () => {
-    setShowMatchPanel(false);
-    setMatchResults({});
+  const handleMarkCustom = (itemIndex: number) => {
+    const item = quotationItems[itemIndex];
+    const newItem = {
+      ...item,
+      _matchStatus: 'custom' as const,
+      '清单名称': '',
+    };
+    const newItems = [...quotationItems];
+    newItems[itemIndex] = newItem;
+    onQuotationDataChange(newItems);
   };
 
-  const matchedItemCount = Object.keys(matchResults).length;
+  const hasRateCard = !!projectRateCard;
 
   return (
     <>
@@ -187,6 +189,13 @@ export function QuotationWorkspace({
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">报价单:</span>
               <span className="text-sm font-medium">{activeQuotationFilename}</span>
+            </div>
+
+            <div className="h-5 w-px bg-gray-200" />
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">清单:</span>
+              <span className="text-sm font-medium">{projectRateCard || '未关联'}</span>
             </div>
 
             <div className="h-5 w-px bg-gray-200" />
@@ -222,112 +231,129 @@ export function QuotationWorkspace({
               </Button>
             </div>
 
-            {projectRateCard && (
-              <>
-                <div className="h-5 w-px bg-gray-200" />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleMatchPrices}
-                  disabled={matchPricesLoading || quotationItems.length === 0}
-                >
-                  <DollarSign className="h-4 w-4 mr-1" />
-                  {matchPricesLoading ? '匹配中...' : '从定价表匹配单价'}
-                </Button>
-                <span className="text-xs text-gray-400">({projectRateCard})</span>
-              </>
-            )}
           </div>
         </CardContent>
       </Card>
 
-      {showMatchPanel && matchedItemCount > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-700">
-                匹配结果（{matchedItemCount} 个项目有候选，请点击选择单价）
-              </h3>
-              <Button variant="ghost" size="sm" onClick={handleCloseMatchPanel}>
-                <X className="h-4 w-4 mr-1" />
-                关闭
-              </Button>
-            </div>
-            <div className="max-h-80 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-gray-500">
-                    <th className="pb-2 pr-4 w-8">序号</th>
-                    <th className="pb-2 pr-4">项目名称</th>
-                    <th className="pb-2 pr-4">当前单价</th>
-                    <th className="pb-2">候选匹配（点击选择）</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quotationItems.map((item, idx) => {
-                    const candidates = matchResults[idx];
-                    if (!candidates) return null;
-                    return (
-                      <tr key={idx} className="border-b last:border-b-0">
-                        <td className="py-2 pr-4 text-gray-400">{idx + 1}</td>
-                        <td className="py-2 pr-4">{item['项目名称']}</td>
-                        <td className="py-2 pr-4 text-gray-500">{item['单价'] || '-'}</td>
-                        <td className="py-2">
-                          <div className="flex flex-wrap gap-2">
-                            {candidates.map((c, ci) => (
-                              <button
-                                key={ci}
-                                onClick={() => handleSelectMatch(idx, c.price)}
-                                className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
-                                  item['单价'] === c.price
-                                    ? 'bg-green-50 border-green-300 text-green-700'
-                                    : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                                }`}
-                              >
-                                <span className="font-medium">{c.name}</span>
-                                <span className="text-gray-400">|</span>
-                                <span>{c.price}</span>
-                                <span className="text-gray-300">({Math.round(c.score)})</span>
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {showMatchPanel && matchedItemCount === 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">没有匹配到任何候选结果</span>
-              <Button variant="ghost" size="sm" onClick={handleCloseMatchPanel}>
-                <X className="h-4 w-4 mr-1" />
-                关闭
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardContent className="pt-4">
-          <DataTable
-            columns={QUOTATION_DISPLAY_COLUMNS}
-            items={displayItems}
-            onEdit={(index, field, value) => {
-              if (field === '序号' || field === '合计') return;
-              onEdit(index, field, value);
-            }}
-            onAddRow={onAddRow}
-            onDeleteRow={onDeleteRow}
-          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">匹配</TableHead>
+                <TableHead className="w-8">序号</TableHead>
+                <TableHead>项目名称</TableHead>
+                <TableHead>清单名称</TableHead>
+                <TableHead>单位</TableHead>
+                <TableHead>数量</TableHead>
+                <TableHead>单价</TableHead>
+                <TableHead>合计</TableHead>
+                <TableHead>备注</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayItems.map((item, i) => {
+                const qItem = quotationItems[i];
+                const matchStatus = qItem?._matchStatus || 'pending';
+                return (
+                  <TableRow key={i}>
+                    <TableCell>
+                      {hasRateCard ? (
+                        <MatchPopover
+                          status={matchStatus}
+                          itemName={qItem?.['项目名称'] || ''}
+                          baseName={qItem?.['清单名称'] || ''}
+                          candidates={matchCandidatesMap[i] || []}
+                          loading={matchLoadingMap[i]}
+                          onOpen={() => fetchCandidatesForItem(i, qItem?.['项目名称'] || '')}
+                          onClose={() => setMatchCandidatesMap(prev => { const next = { ...prev }; delete next[i]; return next; })}
+                          onSelect={(c) => handleSelectCandidate(i, c)}
+                          onMarkCustom={() => handleMarkCustom(i)}
+                        />
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-400">{item['序号']}</TableCell>
+                    <TableCell>
+                      <Input
+                        value={item['项目名称'] ?? ''}
+                        onChange={(e) => onEdit(i, '项目名称', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-gray-600 truncate block max-w-[120px]" title={item['清单名称'] || ''}>
+                        {item['清单名称'] || <span className="text-gray-300">-</span>}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={item['单位'] ?? ''}
+                        onChange={(e) => onEdit(i, '单位', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={item['数量'] ?? ''}
+                        onChange={(e) => onEdit(i, '数量', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={item['单价'] ?? ''}
+                        onChange={(e) => onEdit(i, '单价', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="text-sm font-medium text-gray-700">{item['合计'] || '-'}</TableCell>
+                    <TableCell>
+                      <Input
+                        value={item['备注'] ?? ''}
+                        onChange={(e) => onEdit(i, '备注', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-0.5">
+                        {onAddRow && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onAddRow(i)}
+                            className="h-7 w-7 text-gray-400 hover:text-green-600"
+                            title="在下方插入行"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {onDeleteRow && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDeleteRow(i)}
+                            className="h-7 w-7 text-gray-400 hover:text-red-500"
+                            title="删除此行"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+          {onAddRow && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onAddRow()}
+              className="mt-3 text-gray-500"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              末尾新增行
+            </Button>
+          )}
         </CardContent>
       </Card>
     </>

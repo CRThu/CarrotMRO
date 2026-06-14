@@ -91,7 +91,7 @@ export function Sidebar({
               onToggleExpand={() => onToggleOcr(p)}
               onUpload={onOcrUpload}
             >
-              {currentProject === p && ocrFiles.map(f => (
+              {ocrFiles.map(f => (
                 <TreeItem
                   key={f}
                   label={f}
@@ -111,7 +111,7 @@ export function Sidebar({
               onToggleExpand={() => onToggleQuotation(p)}
               onCreate={onQuotationCreate}
             >
-              {currentProject === p && quotationFiles.map(f => (
+              {quotationFiles.map(f => (
                 <TreeItem
                   key={f}
                   label={f}

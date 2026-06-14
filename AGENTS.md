@@ -32,7 +32,10 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   │       ├── ProjectWorkspace.tsx # 项目工作区（OCR 数据编辑）
 │   │       ├── ProjectConfigWorkspace.tsx # 项目配置工作区（关联定价表）
 │   │       ├── RateCardWorkspace.tsx # 定价表工作区
-│   │       ├── QuotationWorkspace.tsx # 报价单工作区
+│   │       ├── QuotationWorkspace.tsx # 报价单工作区（含匹配功能）
+│   │       ├── MatchPopover.tsx    # 匹配候选选择弹窗（点击图标选择清单名称）
+│   │       ├── TaskNotification.tsx # 通用异步任务通知（浮动提示）
+│   │       ├── ErrorBoundary.tsx   # 错误边界（显示完整堆栈信息）
 │   │       ├── DataTable.tsx       # 通用数据表格组件
 │   │       └── ui/                 # shadcn/ui 基础组件
 │   └── vite.config.js  # Vite 配置（含 /api 代理）
@@ -67,7 +70,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `GET` | `/api/projects/{name}/quotations/{file}` | 读取报价单数据 |
   | `PUT` | `/api/projects/{name}/quotations/{file}` | 保存报价单（自动更新 last_edit_time） |
   | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除指定的报价单文件 |
-- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。报价单支持可编辑表格（增减行、编辑内容），可从 OCR 导入项目名称和数量，支持从关联定价表模糊匹配填充单价。报价单列定义由前端 `QUOTATION_COLUMNS` 指定。
+- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。报价单支持可编辑表格（增减行、编辑内容），可从 OCR 导入项目名称和数量，支持从关联定价表模糊匹配填充单价。报价单列定义由前端 `QUOTATION_COLUMNS` 指定。每行包含 `_matchStatus`（pending/matched/custom）和 `清单名称` 字段记录匹配状态。
 
 ### 2. 协议定价表管理
 - **功能**: 创建和管理协议定价表，支持从 Excel/CSV 文件导入数据。导入后可在页面上预览，如需修改需重新导入覆盖。
@@ -139,7 +142,9 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 
 [报价单模块]
   点击"+"创建报价单 → 生成 quotation-{n}.json（含 created_at、last_edit_time）→ 前端 QuotationWorkspace 展示
-  从 OCR 导入 → 项目名称/数量/单价 → 可选从定价表模糊匹配 top5 → 手动选择填充单价
+  从 OCR 导入 → 项目名称/数量/单价 → 每行显示匹配状态图标（🔵pending/🟢matched/🟠custom）
+  点击匹配图标 → 调用 /api/match 获取 top5 候选 → 弹出 MatchPopover → 点击选择填充单价+清单名称
+  无匹配结果 → 保持 pending → 用户手动选择"不匹配—自定义"
 
 [定价表模块]
   新建定价表 → 创建 data/ratecard/{name}.json（空）
