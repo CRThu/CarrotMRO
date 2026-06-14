@@ -1,8 +1,9 @@
 import json
 import sys
+from pathlib import Path
 from rapidfuzz import process, fuzz
 
-DEFAULT_DATA = "data/standard.json"
+DEFAULT_DATA = str(Path(__file__).parent.parent / "data" / "standard.json")
 
 
 def search_items(query: str, data_path: str = DEFAULT_DATA, n: int = 5) -> dict:

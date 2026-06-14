@@ -16,15 +16,21 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   ├── main.py         # 核心 API 路由与服务入口
 │   ├── photo_ocr.py    # OCR 识别逻辑封装
 │   ├── match.py        # 项目名称匹配逻辑
-│   └── file_utils.py   # 文件读写辅助工具
-├── frontend/           # 前端 React 应用
-│   └── src/            # 前端源代码
-├── data/               # 数据存储目录
+│   ├── file_utils.py   # 文件读写辅助工具
+│   ├── process_excel.py# Excel 解析工具（独立运行）
+│   ├── search.py       # 模糊搜索工具（独立运行）
+│   ├── pyproject.toml  # Python 依赖配置
+│   └── uv.lock         # 依赖锁文件
+├── frontend/           # 前端 React + Vite 应用
+│   ├── src/            # 前端源代码
+│   └── vite.config.js  # Vite 配置（含 /api 代理）
+├── data/               # 数据存储目录（自动定位，可通过 .env 覆盖）
 │   ├── projects/       # 项目数据及 OCR 结果存储
 │   └── ratecard/       # 协议定价表 JSON 文件（*.json）
-├── run.bat             # 快速启动脚本
-├── build.bat           # 前端构建脚本
-└── (其他根目录脚本)     # 辅助工具
+├── .env.example        # 环境变量模板
+├── dev.bat             # 开发环境启动（FastAPI + Vite 并行）
+├── run.bat             # 生产环境启动（仅 FastAPI）
+└── build.bat           # 前端构建 → backend/static/
 ```
 
 ## 核心功能
@@ -81,8 +87,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
     - **后端**: 确保已安装 Python 环境及所需的依赖库（请查阅 `pyproject.toml`）。
     - **前端**: 确保已进入 `frontend/` 目录，执行 `bun install` 安装依赖。
 3.  **启动**:
-    - 开发环境下，可分别启动后端服务和前端开发服务器。
-    - 使用提供的 `run.bat` 脚本可以快速启动整个系统。
+    - **开发模式**: 双击 `dev.bat`，自动并行启动 FastAPI（端口 8000，热重载）和 Vite（端口 5173，代理 `/api`）。
+    - **生产模式**: 双击 `run.bat` 启动 FastAPI（端口 8000），前端需先 `build.bat` 构建。
+    - **仅构建前端**: 双击 `build.bat`，将 React 构建产物复制到 `backend/static/`。
 
 ## 文档维护规范
 为了确保文档始终反映系统实际状态，遵循以下原则：

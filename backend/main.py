@@ -7,9 +7,9 @@ import json
 import shutil
 import asyncio
 import uuid
-from pathlib import Path
 from typing import List, Dict, Any
 from io import BytesIO
+from config import settings
 from photo_ocr import ocr_images
 
 app = FastAPI()
@@ -22,17 +22,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 数据根目录
-DATA_ROOT = Path(os.getenv("DATA_ROOT", "data"))
-# 项目数据存放目录
-PROJECT_BASE_DIR = DATA_ROOT / os.getenv("PROJECT_SUBDIR", "projects")
-# 协议定价存放目录
-RATECARD_BASE_DIR = DATA_ROOT / "ratecard"
+# 数据目录
+PROJECT_BASE_DIR = settings.project_dir
+RATECARD_BASE_DIR = settings.ratecard_dir
+TEMPLATE_DIR = settings.template_dir
 
 # 确保目录存在
 PROJECT_BASE_DIR.mkdir(exist_ok=True, parents=True)
 RATECARD_BASE_DIR.mkdir(exist_ok=True, parents=True)
-TEMPLATE_DIR = DATA_ROOT / os.getenv("TEMPLATE_SUBDIR", "template")
 TEMPLATE_DIR.mkdir(exist_ok=True, parents=True)
 
 # 在内存中维护任务状态
@@ -332,9 +329,9 @@ async def delete_ocr_file(project_name: str, filename: str):
 
 
 # 挂载前端静态文件 (打包后)
-static_dir = Path(__file__).parent / "static"
-if static_dir.exists():
-    app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn

@@ -3,21 +3,15 @@
 使用最新的 google.genai SDK。
 """
 
-import os
 import json
-from pathlib import Path
 from datetime import datetime
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from config import settings
 
-# 加载 .env 配置
-load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
-
-API_KEY = os.getenv("GEMINI_API_KEY", "")
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
-# 专注于任务指令，不再包含 JSON 结构描述
-PROMPT_INSTRUCTIONS = os.getenv("GEMINI_PROMPT", """
+API_KEY = settings.gemini_api_key
+MODEL_NAME = settings.gemini_model
+PROMPT_INSTRUCTIONS = settings.gemini_prompt or """
 你是一个专业的工程报价单OCR识别助手。
 你的任务是阅读并理解图片中的报价单内容，提取其中的项目信息。
 
@@ -26,7 +20,7 @@ PROMPT_INSTRUCTIONS = os.getenv("GEMINI_PROMPT", """
 2. 不要对项目进行序号编号。
 3. 不要遗漏项目，也不要虚构项目。
 4. 将所有不确定或有疑问的内容汇总在备注字段中。
-""")
+"""
 
 # 定义严格的响应 Schema (强制约束格式)
 RESPONSE_SCHEMA = types.Schema(

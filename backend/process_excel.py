@@ -3,11 +3,13 @@ import json
 import argparse
 from pathlib import Path
 
+ROOT_DIR = Path(__file__).parent.parent
+
 # ═══════════════════════════════════════════
 # 命令行参数
 # ═══════════════════════════════════════════
 parser = argparse.ArgumentParser(description="从标准项目Excel提取完整数据行")
-parser.add_argument("-i", "--input", default="project-template/standard.xlsx",
+parser.add_argument("-i", "--input", default=str(ROOT_DIR / "project-template" / "standard.xlsx"),
                     help="输入Excel文件路径 (默认: project-template/standard.xlsx)")
 parser.add_argument("-o", "--output", default=None,
                     help="输出JSON文件路径 (默认: data/<同名>.json)")
@@ -105,7 +107,7 @@ output = {"items": results}
 if args.output:
     output_path = Path(args.output)
 else:
-    output_path = Path("data") / f"{Path(input_path).stem}.json"
+    output_path = ROOT_DIR / "data" / f"{Path(input_path).stem}.json"
 output_path.parent.mkdir(parents=True, exist_ok=True)
 
 with open(output_path, "w", encoding="utf-8") as f:
