@@ -8,9 +8,10 @@ import shutil
 import asyncio
 import uuid
 from typing import List, Dict, Any
-from io import BytesIO
+from pathlib import Path
 from config import settings
 from photo_ocr import ocr_images
+from ratecard_parser import parse_ratecard_file
 
 app = FastAPI()
 
@@ -35,7 +36,14 @@ TEMPLATE_DIR.mkdir(exist_ok=True, parents=True)
 # 在内存中维护任务状态
 tasks_db: Dict[str, Dict[str, Any]] = {}
 
-TABLE_FIELDS = ["name", "quantity", "unit", "unit_price"]
+TABLE_FIELDS = ["name", "quantity", "unit", "unit_price"]  # OCR 输出字段
+
+OCR_COLUMNS = [
+    {"name": "项目", "strict": True, "alias": None},
+    {"name": "数量", "strict": True, "alias": None},
+    {"name": "单位", "strict": True, "alias": None},
+    {"name": "单价", "strict": True, "alias": None},
+]
 
 
 # ========== 后台 OCR 任务函数（仅项目用） ==========
@@ -59,7 +67,7 @@ async def run_ocr_task(task_id: str, project_name: str, content_list: List[bytes
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
 
-        tasks_db[task_id] = {"status": "done", "result": result, "file": json_filename}
+        tasks_db[task_id] = {"status": "done", "result": result, "file": json_filename, "columns": OCR_COLUMNS}
     except Exception as e:
         tasks_db[task_id] = {"status": "error", "message": str(e)}
 
@@ -76,19 +84,14 @@ def read_ratecard_data(ratecard_name: str) -> dict:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"items": [], "remarks": ""}
+    return {"columns": [], "items": []}
 
 
 def write_ratecard_data(ratecard_name: str, data: dict):
     """覆写定价表的 data.json"""
     path = get_ratecard_data_path(ratecard_name)
-    output = {
-        "success": True,
-        "data": data,
-        "timestamp": datetime.now().isoformat()
-    }
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ========== 路由：协议定价表 ==========
@@ -109,7 +112,7 @@ async def create_ratecard(ratecard_name: str):
     path = get_ratecard_data_path(ratecard_name)
     if path.exists():
         raise HTTPException(status_code=400, detail="协议定价表已存在")
-    write_ratecard_data(ratecard_name, {"items": [], "remarks": ""})
+    write_ratecard_data(ratecard_name, {"columns": [], "items": []})
     return {"message": "协议定价表创建成功"}
 
 
@@ -124,92 +127,19 @@ async def get_ratecard_data(ratecard_name: str):
 
 @app.post("/api/ratecards/{ratecard_name}/import")
 async def import_ratecard(ratecard_name: str, file: UploadFile = File(...)):
-    """上传 Excel 文件，解析后写入 JSON"""
+    """上传 Excel/CSV 文件，按 !/? 标记解析后写入 JSON"""
     path = get_ratecard_data_path(ratecard_name)
     if not path.exists():
         raise HTTPException(status_code=404, detail="定价表不存在")
 
     content = await file.read()
-    filename_lower = file.filename.lower() if file.filename else ""
+    try:
+        data = parse_ratecard_file(content, file.filename or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    if filename_lower.endswith(".xlsx") or filename_lower.endswith(".xls"):
-        try:
-            import openpyxl
-            wb = openpyxl.load_workbook(BytesIO(content), data_only=True)
-            ws = wb.active
-            rows = list(ws.iter_rows(values_only=True))
-            if not rows:
-                return {"items": [], "remarks": "导入文件为空"}
-
-            # 尝试自动识别表头位置
-            start_row = 0
-            headers = []
-            for i, row in enumerate(rows):
-                vals = [str(v).strip().lower() if v else "" for v in row]
-                # 检查是否包含常见的表头关键词
-                if any(kw in " ".join(vals) for kw in ["名称", "物料", "产品", "name", "品名", "规格"]):
-                    headers = vals
-                    start_row = i + 1
-                    break
-
-            items = []
-            for row in rows[start_row:]:
-                # 跳过全空行
-                vals = [str(v).strip() if v else "" for v in row]
-                if all(v == "" for v in vals):
-                    continue
-                item = {
-                    "name": vals[0] if len(vals) > 0 else "",
-                    "quantity": vals[1] if len(vals) > 1 else "",
-                    "unit": vals[2] if len(vals) > 2 else "",
-                    "unit_price": vals[3] if len(vals) > 3 else "",
-                }
-                # 至少要有名称才加入
-                if item["name"]:
-                    items.append(item)
-
-            data = {"items": items, "remarks": f"从 {file.filename} 导入，共 {len(items)} 行"}
-            write_ratecard_data(ratecard_name, data)
-            return data
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Excel 解析失败: {str(e)}")
-
-    elif filename_lower.endswith(".csv"):
-        try:
-            import csv
-            text = content.decode("utf-8-sig")
-            reader = csv.reader(text.splitlines())
-            rows = list(reader)
-
-            start_row = 0
-            for i, row in enumerate(rows):
-                line = " ".join(v.strip().lower() for v in row)
-                if any(kw in line for kw in ["名称", "物料", "产品", "name", "品名", "规格"]):
-                    start_row = i + 1
-                    break
-
-            items = []
-            for row in rows[start_row:]:
-                vals = [v.strip() for v in row]
-                if all(v == "" for v in vals):
-                    continue
-                item = {
-                    "name": vals[0] if len(vals) > 0 else "",
-                    "quantity": vals[1] if len(vals) > 1 else "",
-                    "unit": vals[2] if len(vals) > 2 else "",
-                    "unit_price": vals[3] if len(vals) > 3 else "",
-                }
-                if item["name"]:
-                    items.append(item)
-
-            data = {"items": items, "remarks": f"从 {file.filename} 导入，共 {len(items)} 行"}
-            write_ratecard_data(ratecard_name, data)
-            return data
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"CSV 解析失败: {str(e)}")
-
-    else:
-        raise HTTPException(status_code=400, detail="不支持的文件格式，请上传 .xlsx / .xls / .csv 文件")
+    write_ratecard_data(ratecard_name, data)
+    return data
 
 
 # ========== 路由：项目 ==========
@@ -301,6 +231,7 @@ async def get_ocr_data(project_name: str, filename: str):
         raise HTTPException(status_code=404, detail="文件不存在")
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    data["columns"] = OCR_COLUMNS
     return data
 
 

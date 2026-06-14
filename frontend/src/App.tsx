@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '@/api';
-import { TableData, TableItem } from '@/types';
+import { OcrTableData, RateCardTableData } from '@/types';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectWorkspace } from '@/components/ProjectWorkspace';
 import { RateCardWorkspace } from '@/components/RateCardWorkspace';
@@ -13,13 +13,13 @@ function App() {
   const [currentRateCard, setCurrentRateCard] = useState<string | null>(null);
   const [ocrFiles, setOcrFiles] = useState<string[]>([]);
   const [activeFilename, setActiveFilename] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<TableData>({ items: [], remarks: '' });
+  const [tableData, setTableData] = useState<OcrTableData>({ columns: [], items: [], remarks: '' });
   const [loading, setLoading] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['projects', 'ratecards']));
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [expandedOcr, setExpandedOcr] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'project' | 'ratecard' | null>(null);
-  const [ratecardTableData, setRatecardTableData] = useState<TableData>({ items: [], remarks: '' });
+  const [ratecardTableData, setRatecardTableData] = useState<RateCardTableData>({ columns: [], items: [] });
   const [ratecardImporting, setRatecardImporting] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -35,19 +35,19 @@ function App() {
       setExpandedProject(currentProject);
       setExpandedOcr(currentProject);
       api.getProjectInfo(currentProject).then(res => setProjectRateCard(res.data.ratecard_name)).catch((err: any) => { alert("获取项目信息失败: " + (err?.message || String(err))); });
-      setTableData({ items: [], remarks: '' });
+      setTableData({ columns: [], items: [], remarks: '' });
     }
   }, [currentProject]);
 
   useEffect(() => {
     if (currentRateCard) {
       api.getRateCardData(currentRateCard).then(res => {
-        const d = res.data.data || res.data;
+        const d = res.data;
         setRatecardTableData({
+          columns: Array.isArray(d.columns) ? d.columns : [],
           items: Array.isArray(d.items) ? d.items : [],
-          remarks: d.remarks || ''
         });
-      }).catch(() => setRatecardTableData({ items: [], remarks: '' }));
+      }).catch(() => setRatecardTableData({ columns: [], items: [] }));
     }
   }, [currentRateCard]);
 
@@ -55,11 +55,11 @@ function App() {
     return () => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; } };
   }, []);
 
-  const handleEdit = (index: number, field: keyof TableItem, value: string) => {
+  const handleEdit = (index: number, field: string, value: string) => {
     const items = tableData?.items;
     if (!items || index < 0 || index >= items.length) return;
     const newItems = [...items];
-    newItems[index][field] = value;
+    newItems[index] = { ...newItems[index], [field]: value };
     setTableData({ ...tableData, items: newItems });
   };
 
@@ -68,6 +68,7 @@ function App() {
       const res = await api.getOcrData(currentProject!, filename);
       const fileData = res.data.data || res.data;
       setTableData({
+        columns: Array.isArray(fileData.columns) ? fileData.columns : [],
         items: Array.isArray(fileData.items) ? fileData.items : [],
         remarks: fileData.remarks || ''
       });
@@ -112,6 +113,7 @@ function App() {
             }
 
             setTableData({
+              columns: Array.isArray(statusRes.data.columns) ? statusRes.data.columns : [],
               items: Array.isArray(actualData.items) ? actualData.items : [],
               remarks: actualData.remarks || ''
             });
@@ -144,18 +146,18 @@ function App() {
       fetchOcrFiles(currentProject!);
       if (activeFilename === filename) {
         setActiveFilename(null);
-        setTableData({ items: [], remarks: '' });
+      setTableData({ columns: [], items: [], remarks: '' });
       }
     } catch (err) {
       alert('删除失败');
     }
   };
 
-  const handleRateCardEdit = (index: number, field: keyof TableItem, value: string) => {
+  const handleRateCardEdit = (index: number, field: string, value: string) => {
     const items = ratecardTableData?.items;
     if (!items || index < 0 || index >= items.length) return;
     const newItems = [...items];
-    newItems[index][field] = value;
+    newItems[index] = { ...newItems[index], [field]: value };
     setRatecardTableData({ ...ratecardTableData, items: newItems });
   };
 
@@ -165,10 +167,10 @@ function App() {
     formData.append('file', file);
     try {
       const res = await api.importRateCardFile(currentRateCard!, formData);
-      const d = res.data.data || res.data;
+      const d = res.data;
       setRatecardTableData({
+        columns: Array.isArray(d.columns) ? d.columns : [],
         items: Array.isArray(d.items) ? d.items : [],
-        remarks: d.remarks || ''
       });
     } catch (err: any) {
       alert("导入失败: " + (err.response?.data?.detail || err.message));

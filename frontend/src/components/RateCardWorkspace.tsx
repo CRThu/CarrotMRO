@@ -1,14 +1,14 @@
 import { useRef } from 'react';
-import { TableData, TableItem } from '@/types';
+import { RateCardTableData } from '@/types';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface RateCardWorkspaceProps {
   currentRateCard: string;
-  ratecardTableData: TableData;
+  ratecardTableData: RateCardTableData;
   importing: boolean;
-  onEdit: (index: number, field: keyof TableItem, value: string) => void;
+  onEdit: (index: number, field: string, value: string) => void;
   onImport: (file: File) => void;
 }
 
@@ -52,13 +52,11 @@ export function RateCardWorkspace({
             </div>
           </div>
 
-          <DataTable items={ratecardTableData?.items ?? []} onEdit={onEdit} />
-
-          {ratecardTableData.remarks && (
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
-              {ratecardTableData.remarks}
-            </div>
-          )}
+          <DataTable
+            columns={ratecardTableData?.columns ?? []}
+            items={ratecardTableData?.items ?? []}
+            onEdit={onEdit}
+          />
         </CardContent>
       </Card>
     </>

@@ -1,4 +1,4 @@
-import { TableData, TableItem } from '@/types';
+import { OcrTableData } from '@/types';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,8 @@ interface ProjectWorkspaceProps {
   rateCards: string[];
   activeFilename: string | null;
   loading: boolean;
-  tableData: TableData;
-  onEdit: (index: number, field: keyof TableItem, value: string) => void;
+  tableData: OcrTableData;
+  onEdit: (index: number, field: string, value: string) => void;
   onSave: () => void;
   onUpdateRateCard: (name: string) => Promise<void>;
 }
@@ -51,7 +51,7 @@ export function ProjectWorkspace({
         <CardContent className="pt-6">
           {loading && <p className="mb-4 text-blue-600 font-medium">AI 识别中...</p>}
           {activeFilename && <h3 className="mb-4 text-lg font-semibold text-gray-800">当前文件: {activeFilename}</h3>}
-          <DataTable key={activeFilename} items={tableData?.items ?? []} onEdit={onEdit} />
+          <DataTable key={activeFilename} columns={tableData?.columns ?? []} items={tableData?.items ?? []} onEdit={onEdit} />
           <Button onClick={onSave} className="mt-6 bg-green-600 hover:bg-green-700">保存修改</Button>
         </CardContent>
       </Card>

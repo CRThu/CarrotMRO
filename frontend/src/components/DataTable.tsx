@@ -1,38 +1,34 @@
-import { TableItem } from '@/types';
+import { RateCardColumn, TableItem } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 
 interface DataTableProps {
+  columns: RateCardColumn[];
   items: TableItem[];
-  onEdit: (index: number, field: keyof TableItem, value: string) => void;
+  onEdit: (index: number, field: string, value: string) => void;
 }
 
-export const DataTable = ({ items, onEdit }: DataTableProps) => {
+export const DataTable = ({ columns, items, onEdit }: DataTableProps) => {
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>项目</TableHead>
-          <TableHead>数量</TableHead>
-          <TableHead>单位</TableHead>
-          <TableHead>单价</TableHead>
+          {columns.map((col) => (
+            <TableHead key={col.name}>{col.name}</TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {items.map((item, i) => (
           <TableRow key={i}>
-            <TableCell>
-              <Input value={item.name} onChange={(e) => onEdit(i, 'name', e.target.value)} />
-            </TableCell>
-            <TableCell>
-              <Input value={item.quantity} onChange={(e) => onEdit(i, 'quantity', e.target.value)} />
-            </TableCell>
-            <TableCell>
-              <Input value={item.unit} onChange={(e) => onEdit(i, 'unit', e.target.value)} />
-            </TableCell>
-            <TableCell>
-              <Input value={item.unit_price || ''} onChange={(e) => onEdit(i, 'unit_price', e.target.value)} />
-            </TableCell>
+            {columns.map((col) => (
+              <TableCell key={col.name}>
+                <Input
+                  value={item[col.name] ?? ''}
+                  onChange={(e) => onEdit(i, col.name, e.target.value)}
+                />
+              </TableCell>
+            ))}
           </TableRow>
         ))}
       </TableBody>

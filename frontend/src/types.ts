@@ -1,11 +1,18 @@
-export type TableItem = {
+export type RateCardColumn = {
   name: string;
-  quantity: string;
-  unit: string;
-  unit_price: string;
+  strict: boolean;
+  alias: string | null;
 };
 
-export type TableData = {
+export type TableItem = Record<string, string>;
+
+export type OcrTableData = {
+  columns: RateCardColumn[];
   items: TableItem[];
   remarks: string;
+};
+
+export type RateCardTableData = {
+  columns: RateCardColumn[];
+  items: TableItem[];
 };
