@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '@/api';
 import { TableData, TableItem } from '@/types';
-import { DataTable } from '@/components/DataTable';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Sidebar } from '@/components/Sidebar';
+import { ProjectWorkspace } from '@/components/ProjectWorkspace';
+import { RateCardWorkspace } from '@/components/RateCardWorkspace';
 
 function App() {
   const [projects, setProjects] = useState<string[]>([]);
@@ -17,13 +15,12 @@ function App() {
   const [activeFilename, setActiveFilename] = useState<string | null>(null);
   const [tableData, setTableData] = useState<TableData>({ items: [], remarks: '' });
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'data' | 'upload'>('data');
-  const [projectName, setProjectName] = useState('');
-
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['projects', 'ratecards']));
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [expandedOcr, setExpandedOcr] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'project' | 'ratecard' | null>(null);
   const [ratecardTableData, setRatecardTableData] = useState<TableData>({ items: [], remarks: '' });
   const [ratecardImporting, setRatecardImporting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
@@ -35,9 +32,10 @@ function App() {
   useEffect(() => {
     if (currentProject) {
       fetchOcrFiles(currentProject);
+      setExpandedProject(currentProject);
+      setExpandedOcr(currentProject);
       api.getProjectInfo(currentProject).then(res => setProjectRateCard(res.data.ratecard_name)).catch((err: any) => { alert("获取项目信息失败: " + (err?.message || String(err))); });
       setTableData({ items: [], remarks: '' });
-      setActiveTab('data');
     }
   }, [currentProject]);
 
@@ -54,12 +52,7 @@ function App() {
   }, [currentRateCard]);
 
   useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
+    return () => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; } };
   }, []);
 
   const handleEdit = (index: number, field: keyof TableItem, value: string) => {
@@ -79,7 +72,6 @@ function App() {
         remarks: fileData.remarks || ''
       });
       setActiveFilename(filename);
-      setActiveTab('data');
     } catch (err) { alert("读取数据失败"); }
   };
 
@@ -91,6 +83,74 @@ function App() {
     } catch (err) { alert("保存失败"); }
   };
 
+  const handleOcrUpload = async (files: FileList) => {
+    setLoading(true);
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
+
+    try {
+      const res = await api.uploadOcrFiles(currentProject!, formData);
+      const { task_id } = res.data;
+
+      pollingRef.current = setInterval(async () => {
+        try {
+          const statusRes = await api.checkTaskStatus(task_id);
+
+          if (statusRes.data.status === 'done') {
+            clearInterval(pollingRef.current!);
+            pollingRef.current = null;
+            setActiveFilename(statusRes.data.file);
+
+            const rawResult = statusRes.data.result || {};
+            const actualData = rawResult.data || rawResult;
+
+            if (rawResult.success === false) {
+              setLoading(false);
+              alert("识别失败: " + (rawResult.error || "未知错误"));
+              fetchOcrFiles(currentProject!);
+              return;
+            }
+
+            setTableData({
+              items: Array.isArray(actualData.items) ? actualData.items : [],
+              remarks: actualData.remarks || ''
+            });
+
+            fetchOcrFiles(currentProject!);
+            setLoading(false);
+          } else if (statusRes.data.status === 'error') {
+            clearInterval(pollingRef.current!);
+            pollingRef.current = null;
+            setLoading(false);
+            alert("识别失败: " + statusRes.data.message);
+          }
+        } catch (pollErr) {
+          clearInterval(pollingRef.current!);
+          pollingRef.current = null;
+          setLoading(false);
+          alert("轮询状态失败: " + String(pollErr));
+        }
+      }, 2000);
+    } catch (uploadErr) {
+      setLoading(false);
+      alert("上传失败: " + String(uploadErr));
+    }
+  };
+
+  const handleOcrDeleteFile = async (filename: string) => {
+    if (!confirm(`确定删除 ${filename} 吗？`)) return;
+    try {
+      await api.deleteOcrFile(currentProject!, filename);
+      fetchOcrFiles(currentProject!);
+      if (activeFilename === filename) {
+        setActiveFilename(null);
+        setTableData({ items: [], remarks: '' });
+      }
+    } catch (err) {
+      alert('删除失败');
+    }
+  };
+
   const handleRateCardEdit = (index: number, field: keyof TableItem, value: string) => {
     const items = ratecardTableData?.items;
     if (!items || index < 0 || index >= items.length) return;
@@ -99,12 +159,10 @@ function App() {
     setRatecardTableData({ ...ratecardTableData, items: newItems });
   };
 
-  const handleRateCardImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleRateCardImport = async (file: File) => {
     setRatecardImporting(true);
     const formData = new FormData();
-    formData.append('file', files[0]);
+    formData.append('file', file);
     try {
       const res = await api.importRateCardFile(currentRateCard!, formData);
       const d = res.data.data || res.data;
@@ -116,266 +174,82 @@ function App() {
       alert("导入失败: " + (err.response?.data?.detail || err.message));
     }
     setRatecardImporting(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleToggleSection = (section: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      next.has(section) ? next.delete(section) : next.add(section);
+      return next;
+    });
+  };
+
+  const handleSelectProject = (name: string) => {
+    setCurrentProject(name);
+    setCurrentRateCard(null);
+    setCurrentView('project');
+    setActiveFilename(null);
+  };
+
+  const handleToggleProject = (name: string) => {
+    if (currentProject === name) {
+      setExpandedProject(expandedProject === name ? null : name);
+    } else {
+      handleSelectProject(name);
+    }
   };
 
   return (
     <div className="flex h-screen font-sans text-gray-800">
-      <aside className="w-72 p-6 bg-slate-800 text-white flex flex-col overflow-y-auto">
-        <h2 className="text-2xl font-light mb-8">CarrotMRO</h2>
-
-        <div className="mb-8">
-          <Input
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            placeholder="新项目名称..."
-            className="bg-white text-gray-800 placeholder-gray-400 mb-2"
-          />
-          <Button
-            onClick={async () => { await api.createProject(projectName); setProjectName(''); fetchProjects(); }}
-            className="w-full bg-blue-500 hover:bg-blue-600"
-          >
-            创建项目
-          </Button>
-        </div>
-
-        <h3 className="text-sm font-semibold opacity-70 mb-4">项目列表</h3>
-        <ul className="space-y-2">
-          {projects.map(p => (
-            <li
-              key={p}
-              onClick={() => { setCurrentProject(p); setCurrentRateCard(null); setCurrentView('project'); }}
-              className={`p-3 cursor-pointer rounded transition ${currentProject === p ? 'bg-slate-700' : 'hover:bg-slate-700/50'}`}
-            >
-              {p}
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-8">
-          <h3 className="text-sm font-semibold opacity-70 mb-4">协议定价表</h3>
-          <div className="mb-4">
-            <Input
-              id="new-ratecard-input"
-              placeholder="新定价表名称..."
-              className="bg-white text-gray-800 placeholder-gray-400 mb-2 text-sm"
-              onKeyDown={async (e) => {
-                if (e.key === 'Enter') {
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (!val) return;
-                  await api.createRateCard(val);
-                  (e.target as HTMLInputElement).value = '';
-                  fetchRateCards();
-                }
-              }}
-            />
-            <Button
-              onClick={async () => {
-                const input = document.getElementById('new-ratecard-input') as HTMLInputElement;
-                if (!input.value.trim()) return;
-                await api.createRateCard(input.value);
-                input.value = '';
-                fetchRateCards();
-              }}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-sm"
-            >
-              新建定价表
-            </Button>
-          </div>
-          <ul className="space-y-1">
-            {rateCards.map(rc => (
-              <li
-                key={rc}
-                onClick={() => { setCurrentRateCard(rc); setCurrentProject(null); setCurrentView('ratecard'); }}
-                className={`p-2 cursor-pointer rounded transition text-sm ${currentRateCard === rc ? 'bg-slate-700' : 'hover:bg-slate-700/50'}`}
-              >
-                {rc}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {currentProject && (
-          <div className="mt-8">
-            <h4 className="text-sm font-semibold opacity-70 mb-3">识别记录</h4>
-            {ocrFiles.map(f => (
-              <div
-                key={f}
-                className="group flex items-center justify-between cursor-pointer text-slate-400 hover:text-white mb-2 text-sm"
-              >
-                <span className="truncate flex-1" onClick={() => handleSelectFile(f)}>{f}</span>
-                <span
-                  className="ml-2 text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition-opacity select-none"
-                  title="删除"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (!confirm(`确定删除 ${f} 吗？`)) return;
-                    try {
-                      await api.deleteOcrFile(currentProject!, f);
-                      fetchOcrFiles(currentProject!);
-                      if (activeFilename === f) {
-                        setActiveFilename(null);
-                        setTableData({ items: [], remarks: '' });
-                      }
-                    } catch (err) {
-                      alert('删除失败');
-                    }
-                  }}
-                >
-                  ×
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </aside>
+      <Sidebar
+        projects={projects}
+        rateCards={rateCards}
+        ocrFiles={ocrFiles}
+        currentProject={currentProject}
+        currentRateCard={currentRateCard}
+        currentView={currentView}
+        activeFilename={activeFilename}
+        expandedSections={expandedSections}
+        expandedProject={expandedProject}
+        expandedOcr={expandedOcr}
+        onToggleSection={handleToggleSection}
+        onSelectProject={handleSelectProject}
+        onSelectRateCard={(name) => { setCurrentRateCard(name); setCurrentProject(null); setCurrentView('ratecard'); }}
+        onCreateProject={async (name) => { await api.createProject(name); fetchProjects(); }}
+        onCreateRateCard={async (name) => { await api.createRateCard(name); fetchRateCards(); }}
+        onToggleProject={handleToggleProject}
+        onToggleOcr={(name) => setExpandedOcr(expandedOcr === name ? null : name)}
+        onOcrSelectFile={handleSelectFile}
+        onOcrDeleteFile={handleOcrDeleteFile}
+        onOcrUpload={handleOcrUpload}
+      />
 
       <main className="flex-1 p-10 bg-gray-100 overflow-y-auto">
         {currentView === 'project' && currentProject && (
-          <>
-            <h1 className="text-3xl font-light mb-8 text-gray-700">项目: {currentProject}</h1>
-
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>项目配置</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <label className="block text-sm text-gray-600 mb-2">关联协议定价表:</label>
-                <select
-                  value={projectRateCard || ''}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    await api.updateProjectRateCard(currentProject!, val);
-                    setProjectRateCard(val);
-                  }}
-                  className="w-full p-2 border rounded-lg"
-                >
-                  <option value="">未关联</option>
-                  {rateCards.map(rc => <option key={rc} value={rc}>{rc}</option>)}
-                </select>
-              </CardContent>
-            </Card>
-
-            <Card className="mb-6">
-              <CardContent className="pt-6">
-                <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'data' | 'upload')}>
-                  <TabsList className="mb-6">
-                    <TabsTrigger value="data">数据工作台</TabsTrigger>
-                    <TabsTrigger value="upload">上传新图片</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="upload">
-                    <div className="p-12 text-center border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-                      <label className="cursor-pointer inline-flex bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium transition">
-                        选择图片文件
-                        <input type="file" multiple className="hidden" onChange={async (e) => {
-                          if (!e.target.files) return;
-                          setLoading(true);
-                          const formData = new FormData();
-                          for (let i = 0; i < e.target.files.length; i++) formData.append('files', e.target.files[i]);
-
-                          try {
-                            const res = await api.uploadOcrFiles(currentProject!, formData);
-                            const { task_id } = res.data;
-
-                            pollingRef.current = setInterval(async () => {
-                              try {
-                                const statusRes = await api.checkTaskStatus(task_id);
-
-                                if (statusRes.data.status === 'done') {
-                                  clearInterval(pollingRef.current!);
-                                  pollingRef.current = null;
-                                  setActiveFilename(statusRes.data.file);
-
-                                  const rawResult = statusRes.data.result || {};
-                                  const actualData = rawResult.data || rawResult;
-
-                                  if (rawResult.success === false) {
-                                    setLoading(false);
-                                    alert("识别失败: " + (rawResult.error || "未知错误"));
-                                    fetchOcrFiles(currentProject!);
-                                    return;
-                                  }
-
-                                  setTableData({
-                                    items: Array.isArray(actualData.items) ? actualData.items : [],
-                                    remarks: actualData.remarks || ''
-                                  });
-
-                                  fetchOcrFiles(currentProject!);
-                                  setLoading(false);
-                                  setActiveTab('data');
-                                } else if (statusRes.data.status === 'error') {
-                                  clearInterval(pollingRef.current!);
-                                  pollingRef.current = null;
-                                  setLoading(false);
-                                  alert("识别失败: " + statusRes.data.message);
-                                }
-                              } catch (pollErr) {
-                                clearInterval(pollingRef.current!);
-                                pollingRef.current = null;
-                                setLoading(false);
-                                alert("轮询状态失败: " + String(pollErr));
-                              }
-                            }, 2000);
-                          } catch (uploadErr) {
-                            setLoading(false);
-                            alert("上传失败: " + String(uploadErr));
-                          }
-                        }} />
-                      </label>
-                      {loading && <p className="mt-4 text-blue-600 font-medium">AI 识别中...</p>}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="data">
-                    {activeFilename && <h3 className="mb-4 text-lg font-semibold text-gray-800">当前文件: {activeFilename}</h3>}
-                    <DataTable key={activeFilename} items={tableData?.items ?? []} onEdit={handleEdit} />
-                    <Button onClick={handleSave} className="mt-6 bg-green-600 hover:bg-green-700">保存修改</Button>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </>
+          <ProjectWorkspace
+            currentProject={currentProject}
+            projectRateCard={projectRateCard}
+            rateCards={rateCards}
+            activeFilename={activeFilename}
+            loading={loading}
+            tableData={tableData}
+            onEdit={handleEdit}
+            onSave={handleSave}
+            onUpdateRateCard={async (name) => {
+              await api.updateProjectRateCard(currentProject!, name);
+              setProjectRateCard(name);
+            }}
+          />
         )}
 
         {currentView === 'ratecard' && currentRateCard && (
-          <>
-            <h1 className="text-3xl font-light mb-8 text-gray-700">协议定价表: {currentRateCard}</h1>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div></div>
-                  <div className="flex gap-3">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".xlsx,.xls,.csv"
-                      className="hidden"
-                      onChange={handleRateCardImport}
-                    />
-                    <Button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={ratecardImporting}
-                      variant="outline"
-                      className="border-amber-500 text-amber-600 hover:bg-amber-50"
-                    >
-                      {ratecardImporting ? '导入中...' : '导入 Excel / CSV'}
-                    </Button>
-                  </div>
-                </div>
-
-                <DataTable items={ratecardTableData?.items ?? []} onEdit={handleRateCardEdit} />
-
-                {ratecardTableData.remarks && (
-                  <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
-                    {ratecardTableData.remarks}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
+          <RateCardWorkspace
+            currentRateCard={currentRateCard}
+            ratecardTableData={ratecardTableData}
+            importing={ratecardImporting}
+            onEdit={handleRateCardEdit}
+            onImport={handleRateCardImport}
+          />
         )}
 
         {!currentView && (
