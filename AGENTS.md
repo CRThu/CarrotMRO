@@ -19,6 +19,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   ├── match.py        # 模糊搜索工具（match_names）
 
 │   ├── ratecard_parser.py # 定价表 Excel/CSV 解析器（含 extract_names）
+│   ├── quotation_template.py # 报价单 Excel 模板解析与导出
 │   ├── pyproject.toml  # Python 依赖配置
 │   └── uv.lock         # 依赖锁文件
 ├── frontend/           # 前端 React + Vite 应用
@@ -133,6 +134,64 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
   "limit": 5
 }
 ```
+
+### 3. 报价单模板导出
+
+- **功能**: 基于 Excel 模板导出报价单，自动填充数据、复制样式、更新公式行号。
+- **模块**: `backend/quotation_template.py`
+
+#### 模板占位符
+
+占位符采用命名空间前缀区分循环层级：
+
+| 占位符 | 说明 | 输出次数 |
+|--------|------|----------|
+| `{group.name}` | 组名 | 每组一次 |
+| `{group.num}` | 组内序号（从 1 开始） | 每组一次 |
+| `{item.xxx}` | 数据字段（xxx 为模板自定义名称） | 每个 item 一次 |
+| `{row}` | 当前行号（公式引用） | 导出时替换 |
+| `{row-N}` | 当前行号减 N | 导出时替换 |
+| `{row+N}` | 当前行号加 N | 导出时替换 |
+
+**示例模板**:
+```
+行5: {group.name}                           ← 组名行（每组复制一次）
+行6: {group.num} | {item.name} | {item.unit} | {item.quantity} | {item.unit_price} | =D{row}*E{row}  ← 数据行（每个 item 复制一次）
+行8: 合计 | =SUM(F5:F{row-1})               ← 页脚（公式行号自动更新）
+行10: 总价 | =F{row-2}*(1+F{row-1})
+```
+
+#### 导出数据格式
+
+```json
+[
+  {
+    "name": "组名",
+    "items": [
+      {"name": "项目名称", "unit": "单位", "quantity": "数量", "unit_price": "单价"}
+    ]
+  }
+]
+```
+
+items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映射到模板占位符。
+
+#### 导出流程
+
+1. 解析模板，识别 group_row 和 data_row
+2. 根据数据量计算需要插入的行数，在 data_row 后插入空行
+3. 遍历每个组：复制组名行样式 + 填充占位符，再逐行复制数据行样式 + 填充
+4. 扫描页脚区域，更新包含 `{row}` 的公式行号
+5. 如果组名行有合并单元格，为每个组重新创建合并区域
+
+#### 函数接口
+
+| 函数 | 说明 |
+|------|------|
+| `load_template(content: bytes)` | 从 Excel 文件内容加载并解析模板 |
+| `load_template_from_file(path)` | 从文件路径加载模板 |
+| `get_template_info(template)` | 获取模板摘要信息（用于 API 返回） |
+| `export_quotation(template_content, groups)` | 将数据填充到模板，生成 Excel 文件 |
 
 ## 数据流向
 
