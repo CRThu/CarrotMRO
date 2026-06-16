@@ -35,6 +35,23 @@ export const saveQuotationData = (projectName: string, filename: string, data: a
 export const deleteQuotation = (projectName: string, filename: string) =>
   axios.delete(`/api/projects/${projectName}/quotations/${filename}`);
 
+// ===== 模板相关 =====
+export const getTemplates = () => axios.get('/api/templates');
+export const getTemplateInfo = (filename: string) => axios.get(`/api/templates/${filename}/info`);
+export const uploadTemplate = (formData: FormData) => axios.post('/api/templates', formData);
+export const deleteTemplate = (filename: string) => axios.delete(`/api/templates/${filename}`);
+export const updateProjectTemplate = (projectName: string, templateName: string | null) =>
+  axios.patch(`/api/projects/${projectName}/template`, { template_name: templateName });
+export const getProjectColumns = (projectName: string) => axios.get(`/api/projects/${projectName}/columns`);
+export const updateProjectColumns = (projectName: string, columns: string[]) =>
+  axios.patch(`/api/projects/${projectName}/columns`, { columns });
+
+// ===== 报价单导入导出 =====
+export const exportQuotation = (projectName: string, filename: string) =>
+  axios.post(`/api/projects/${projectName}/quotations/${filename}/export`, {}, { responseType: 'blob' });
+export const importQuotation = (projectName: string, formData: FormData) =>
+  axios.post(`/api/projects/${projectName}/quotations/import`, formData);
+
 // ===== 定价表匹配 =====
 export const matchRateCard = (ratecardName: string, queries: string[], limit?: number) =>
   axios.post('/api/match', { ratecard_name: ratecardName, queries, limit: limit ?? 1 });

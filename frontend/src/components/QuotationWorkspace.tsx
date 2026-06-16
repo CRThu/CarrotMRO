@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MatchPopover } from '@/components/MatchPopover';
-import { RateCardColumn, RateCardTableData, TableItem } from '@/types';
+import { RateCardTableData, TableItem } from '@/types';
 import * as api from '@/api';
 import { Save, Upload } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -28,23 +28,13 @@ interface QuotationWorkspaceProps {
   ocrFiles: string[];
   projectRateCard: string | null;
   ratecardTableData: RateCardTableData;
+  selectedColumns: string[];
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (index: number) => void;
   onSave: () => void;
   onQuotationDataChange: (items: QuotationItem[]) => void;
 }
-
-const QUOTATION_DISPLAY_COLUMNS: RateCardColumn[] = [
-  { name: '序号', strict: false, alias: null, computed: true },
-  { name: '项目名称', strict: true, alias: 'name' },
-  { name: '清单名称', strict: false, alias: null, computed: true },
-  { name: '单位', strict: false, alias: null },
-  { name: '数量', strict: true, alias: 'quantity' },
-  { name: '单价', strict: true, alias: 'unit_price' },
-  { name: '合计', strict: false, alias: null, computed: true },
-  { name: '备注', strict: false, alias: null },
-];
 
 const computeTotal = (item: TableItem): string => {
   const qty = parseFloat(item['数量'] ?? '');
@@ -60,6 +50,7 @@ export function QuotationWorkspace({
   ocrFiles,
   projectRateCard,
   ratecardTableData,
+  selectedColumns: _selectedColumns,
   onEdit,
   onAddRow,
   onDeleteRow,
@@ -93,15 +84,35 @@ export function QuotationWorkspace({
       const fileData = raw.data || raw;
       const ocrItems: TableItem[] = Array.isArray(fileData.items) ? fileData.items : [];
 
-      const newItems: QuotationItem[] = ocrItems.map((ocrItem: TableItem) => ({
-        '项目名称': ocrItem['项目'] || '',
-        '单位': ocrItem['单位'] || '',
-        '数量': ocrItem['数量'] || '',
-        '单价': importUnitPrice ? (ocrItem['单价'] || '') : '',
-        '备注': '',
-        _matchStatus: 'pending',
-        '清单名称': '',
-      }));
+      const OCR_TO_QUOTATION: Record<string, string> = {
+        '项目名称': '项目名称',
+        '名称': '项目名称',
+        '物料名称': '项目名称',
+        '项目': '项目名称',
+        '单位': '单位',
+        '数量': '数量',
+        '单价': '单价',
+        '参考单价': '单价',
+        '综合单价': '单价',
+      };
+
+      const newItems: QuotationItem[] = ocrItems.map((ocrItem: TableItem) => {
+        const mapped: QuotationItem = {
+          '项目名称': '',
+          '单位': '',
+          '数量': '',
+          '单价': '',
+          '备注': '',
+          _matchStatus: 'pending',
+          '清单名称': '',
+        };
+        for (const [key, val] of Object.entries(ocrItem)) {
+          const target = OCR_TO_QUOTATION[key];
+          if (target) mapped[target] = val || '';
+        }
+        if (!importUnitPrice) mapped['单价'] = '';
+        return mapped;
+      });
 
       onQuotationDataChange(newItems);
       setMatchCandidatesMap({});

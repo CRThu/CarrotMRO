@@ -30,12 +30,23 @@ function App() {
   const [ocrTaskStatus, setOcrTaskStatus] = useState<{ status: 'processing' | 'done' | 'error'; message?: string } | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [projectTemplate, setProjectTemplate] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<string[]>([]);
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+
+  const toColumns = (cols: any): RateCardColumn[] => {
+    if (!Array.isArray(cols)) return [];
+    return cols.map(c => typeof c === 'string' ? { name: c, strict: false, alias: null } : c);
+  };
+
   const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
   const fetchRateCards = async () => { try { const res = await api.getRateCards(); setRateCards(res.data.ratecards); } catch (err) { console.error(err); } };
+  const fetchTemplates = async () => { try { const res = await api.getTemplates(); setTemplates(res.data.files); } catch (err) { console.error(err); } };
   const fetchOcrFiles = async (projectName: string) => { try { const res = await api.getOcrFiles(projectName); setOcrFiles(res.data.files); } catch (err) { console.error(err); } };
   const fetchQuotationFiles = async (projectName: string) => { try { const res = await api.getQuotations(projectName); setQuotationFiles(res.data.files); } catch (err) { console.error(err); } };
 
-  useEffect(() => { fetchProjects(); fetchRateCards(); }, []);
+  useEffect(() => { fetchProjects(); fetchRateCards(); fetchTemplates(); }, []);
 
   useEffect(() => {
     if (currentProject) {
@@ -44,7 +55,17 @@ function App() {
       setExpandedProject(currentProject);
       setExpandedOcr(currentProject);
       setExpandedQuotation(currentProject);
-      api.getProjectInfo(currentProject).then(res => setProjectRateCard(res.data.ratecard_name)).catch((err: any) => { alert("获取项目信息失败: " + (err?.message || String(err))); });
+      setProjectTemplate(null);
+      setAvailableColumns([]);
+      setSelectedColumns([]);
+      api.getProjectInfo(currentProject).then(res => {
+        setProjectRateCard(res.data.ratecard_name);
+        setProjectTemplate(res.data.template_name);
+      }).catch((err: any) => { alert("获取项目信息失败: " + (err?.message || String(err))); });
+      api.getProjectColumns(currentProject).then(res => {
+        setAvailableColumns(res.data.available_columns || []);
+        setSelectedColumns(res.data.selected_columns || []);
+      }).catch(() => { setAvailableColumns([]); setSelectedColumns([]); });
       setTableData({ columns: [], items: [], remarks: '' });
     }
   }, [currentProject]);
@@ -105,7 +126,7 @@ function App() {
       const raw = res.data;
       const fileData = raw.data || raw;
       setTableData({
-        columns: Array.isArray(raw.columns) ? raw.columns : (Array.isArray(fileData.columns) ? fileData.columns : []),
+        columns: toColumns(raw.columns || fileData.columns),
         items: Array.isArray(fileData.items) ? fileData.items : [],
         remarks: fileData.remarks || ''
       });
@@ -123,6 +144,10 @@ function App() {
   };
 
   const handleOcrUpload = async (files: FileList) => {
+    if (!selectedColumns || selectedColumns.length === 0) {
+      alert('请先在项目配置中关联模板并选择识别列');
+      return;
+    }
     setOcrTaskStatus({ status: 'processing' });
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
@@ -151,7 +176,7 @@ function App() {
             }
 
             setTableData({
-              columns: Array.isArray(statusRes.data.columns) ? statusRes.data.columns : [],
+              columns: toColumns(statusRes.data.columns),
               items: Array.isArray(actualData.items) ? actualData.items : [],
               remarks: actualData.remarks || ''
             });
@@ -273,6 +298,53 @@ function App() {
     setQuotationData({ ...quotationData, items });
   };
 
+  const handleUpdateProjectTemplate = async (templateName: string) => {
+    if (!currentProject) return;
+    try {
+      await api.updateProjectTemplate(currentProject, templateName || null);
+      setProjectTemplate(templateName || null);
+      const colRes = await api.getProjectColumns(currentProject);
+      setAvailableColumns(colRes.data.available_columns || []);
+      setSelectedColumns(colRes.data.selected_columns || []);
+    } catch (err: any) {
+      alert("模板关联失败: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUpdateSelectedColumns = async (columns: string[]) => {
+    if (!currentProject) return;
+    try {
+      await api.updateProjectColumns(currentProject, columns);
+      setSelectedColumns(columns);
+    } catch (err: any) {
+      alert("列配置失败: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUploadTemplate = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      await api.uploadTemplate(formData);
+      fetchTemplates();
+    } catch (err: any) {
+      alert("模板上传失败: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleDeleteTemplate = async (filename: string) => {
+    if (!confirm(`确定删除模板 ${filename} 吗？`)) return;
+    try {
+      await api.deleteTemplate(filename);
+      fetchTemplates();
+      if (projectTemplate === filename) {
+        handleUpdateProjectTemplate('');
+      }
+    } catch (err: any) {
+      alert("删除失败: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   const handleRateCardImport = async (file: File) => {
     setRatecardImporting(true);
     const formData = new FormData();
@@ -356,6 +428,7 @@ function App() {
             ocrFiles={ocrFiles}
             projectRateCard={projectRateCard}
             ratecardTableData={ratecardTableData}
+            selectedColumns={selectedColumns}
             onEdit={handleQuotationEdit}
             onAddRow={handleQuotationAddRow}
             onDeleteRow={handleQuotationDeleteRow}
@@ -381,10 +454,18 @@ function App() {
             currentProject={currentProject}
             projectRateCard={projectRateCard}
             rateCards={rateCards}
+            projectTemplate={projectTemplate}
+            templates={templates}
+            availableColumns={availableColumns}
+            selectedColumns={selectedColumns}
             onUpdateRateCard={async (name) => {
               await api.updateProjectRateCard(currentProject!, name);
               setProjectRateCard(name);
             }}
+            onUpdateTemplate={handleUpdateProjectTemplate}
+            onUpdateColumns={handleUpdateSelectedColumns}
+            onUploadTemplate={handleUploadTemplate}
+            onDeleteTemplate={handleDeleteTemplate}
           />
         )}
 

@@ -457,8 +457,13 @@ async def update_project_template(project_name: str, body: dict):
         if not template_path.exists():
             raise HTTPException(status_code=404, detail="模板不存在")
     project_info["template_name"] = template_name or None
-    # 关联模板时清空选中的列（需要重新选择）
-    project_info["selected_columns"] = []
+    # 关联模板时默认全选所有可用列
+    if template_name:
+        template_path = TEMPLATE_DIR / template_name
+        template = load_template(template_path.read_bytes())
+        project_info["selected_columns"] = get_template_columns(template)
+    else:
+        project_info["selected_columns"] = []
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(project_info, f, ensure_ascii=False, indent=2)
     return {"message": "模板关联更新成功"}
