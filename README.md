@@ -133,9 +133,14 @@ run.bat
 | `POST` | `/api/projects/{name}/ocr` | 上传图片 OCR 识别 |
 | `GET` | `/api/projects/{name}/quotations` | 获取报价单列表 |
 | `POST` | `/api/projects/{name}/quotations` | 创建报价单 |
+| `PATCH` | `/api/projects/{name}/template` | 关联模板 |
+| `POST` | `/api/projects/{name}/quotations/{file}/export` | 导出报价单 Excel |
+| `POST` | `/api/projects/{name}/quotations/import` | 导入报价单 Excel |
 | `GET` | `/api/ratecards` | 获取定价表列表 |
 | `POST` | `/api/ratecards/{name}/import` | 导入定价表 |
 | `POST` | `/api/match` | 模糊匹配物料 |
+| `GET` | `/api/templates` | 获取模板列表 |
+| `POST` | `/api/templates` | 上传模板 |
 
 ## 📁 项目结构
 
@@ -156,7 +161,8 @@ CarrotMRO/
 │   └── vite.config.js   # Vite 配置
 ├── data/                # 数据存储
 │   ├── projects/        # 项目数据
-│   └── ratecard/        # 定价表
+│   ├── ratecard/        # 定价表
+│   └── template/        # 报价单模板
 ├── dev.bat              # 开发启动
 ├── run.bat              # 生产启动
 └── build.bat            # 构建脚本

@@ -42,7 +42,8 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   └── vite.config.js  # Vite 配置（含 /api 代理）
 ├── data/               # 数据存储目录（自动定位，可通过 .env 覆盖）
 │   ├── projects/       # 项目数据及 OCR 结果存储
-│   └── ratecard/       # 协议定价表 JSON 文件（*.json）
+│   ├── ratecard/       # 协议定价表 JSON 文件（*.json）
+│   └── template/       # 报价单 Excel 模板（*.xlsx）
 ├── .env.example        # 环境变量模板
 ├── dev.bat             # 开发环境启动（FastAPI + Vite 并行）
 ├── run.bat             # 生产环境启动（仅 FastAPI）
@@ -60,6 +61,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `POST` | `/api/projects/{name}` | 创建新项目（生成目录 + `project.json`） |
   | `GET` | `/api/projects/{name}` | 获取项目基本信息 |
   | `PATCH` | `/api/projects/{name}/ratecard` | 关联/解除关联定价表 |
+  | `PATCH` | `/api/projects/{name}/template` | 关联/解除关联模板 |
+  | `GET` | `/api/projects/{name}/columns` | 获取项目列配置（可用列 + 已选列） |
+  | `PATCH` | `/api/projects/{name}/columns` | 设置项目选中的列 |
   | `POST` | `/api/projects/{name}/ocr` | 上传图片启动 OCR 异步识别 |
   | `GET` | `/api/tasks/{task_id}` | 轮询 OCR 任务状态（完成时返回 `columns` 和 `result`） |
   | `GET` | `/api/projects/{name}/ocr-files` | 获取项目下的 OCR 结果文件列表 |
@@ -71,7 +75,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `GET` | `/api/projects/{name}/quotations/{file}` | 读取报价单数据 |
   | `PUT` | `/api/projects/{name}/quotations/{file}` | 保存报价单（自动更新 last_edit_time） |
   | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除指定的报价单文件 |
-- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间和关联的定价表名称。OCR 识别成功后，结果存储为 `ocr-1.json`、`ocr-2.json` ... 每个文件包含识别出的物料清单表格数据（`items`）。若 OCR 识别失败（如 API 限流），**不会生成结果文件**，任务状态返回 `{"status": "error", "message": "..."}`。OCR 接口统一返回 `columns` 定义（后端 `OCR_COLUMNS` 单一事实来源）。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time`、`columns` 和 `items`。报价单支持可编辑表格（增减行、编辑内容），可从 OCR 导入项目名称和数量，支持从关联定价表模糊匹配填充单价。报价单列定义由前端 `QUOTATION_COLUMNS` 指定。每行包含 `_matchStatus`（pending/matched/custom）和 `清单名称` 字段记录匹配状态。
+  | `POST` | `/api/projects/{name}/quotations/{file}/export` | 用关联模板导出 Excel |
+  | `POST` | `/api/projects/{name}/quotations/import` | 上传 Excel 导入为新报价单 |
+- **说明**: 创建后会在 `data/projects/{project_name}/` 下生成 `project.json`，记录项目名称、创建时间、关联的定价表名称、关联的模板名称和选中的列名列表。OCR 识别使用动态列配置：用户关联模板后，从模板可用列中勾选需要识别的列，OCR 只识别这些列。报价单存储为 `quotation-1.json`、`quotation-2.json` ...，每个文件包含 `created_at`、`last_edit_time` 和 `items`。报价单列名由模板定义，用户通过勾选确认。支持按 `_group` 字段分组导出，无 `_group` 则作为单组导出。
 
 ### 2. 协议定价表管理
 - **功能**: 创建和管理协议定价表，支持从 Excel/CSV 文件导入数据。导入后可在页面上预览，如需修改需重新导入覆盖。
@@ -135,7 +141,23 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 }
 ```
 
-### 3. 报价单模板导出
+### 3. 模板管理
+
+- **功能**: 上传、下载、删除报价单 Excel 模板。
+- **存储**: 每个模板对应 `data/template/{文件名}.xlsx`。
+- **列提取**: 模板上传时自动解析 `{item.xxx}` 占位符，提取 `xxx` 作为可用列名。
+
+#### 模板 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/templates` | 列出所有模板文件 |
+| `POST` | `/api/templates` | 上传新模板（.xlsx） |
+| `GET` | `/api/templates/{filename}` | 下载模板文件 |
+| `DELETE` | `/api/templates/{filename}` | 删除模板 |
+| `GET` | `/api/templates/{filename}/info` | 获取模板解析信息（可用列名列表） |
+
+### 4. 报价单模板导出
 
 - **功能**: 基于 Excel 模板导出报价单，自动填充数据、复制样式、更新公式行号。
 - **模块**: `backend/quotation_template.py`
@@ -191,23 +213,34 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
 | `load_template(content: bytes)` | 从 Excel 文件内容加载并解析模板 |
 | `load_template_from_file(path)` | 从文件路径加载模板 |
 | `get_template_info(template)` | 获取模板摘要信息（用于 API 返回） |
+| `get_template_columns(template)` | 提取模板中所有可用的数据列名（从 {item.xxx} 中提取 xxx） |
 | `export_quotation(template_content, groups)` | 将数据填充到模板，生成 Excel 文件 |
+| `import_quotation(template_content, excel_content)` | 从 Excel 文件中提取报价单数据，按模板结构分组返回 |
 
 ## 数据流向
 
 ```
 [项目模块]
-  上传图片 → OCR 异步识别 → 英文 key 映射为中文列名 → 保存 ocr-{n}.json → 前端 DataTable 展示 ↔ 编辑保存
+  关联模板 → 解析模板可用列 → 用户勾选需要的列 → 存储到 project.json
+  上传图片 → OCR 动态识别（使用用户勾选的列名） → 保存 ocr-{n}.json → 前端 DataTable 展示 ↔ 编辑保存
 
 [报价单模块]
   点击"+"创建报价单 → 生成 quotation-{n}.json（含 created_at、last_edit_time）→ 前端 QuotationWorkspace 展示
-  从 OCR 导入 → 项目名称/数量/单价 → 每行显示匹配状态图标（🔵pending/🟢matched/🟠custom）
+  从 OCR 导入 → 使用模板定义的列名 → 每行显示匹配状态图标（🔵pending/🟢matched/🟠custom）
   点击匹配图标 → 调用 /api/match 获取 top5 候选 → 弹出 MatchPopover → 点击选择填充单价+清单名称
   无匹配结果 → 保持 pending → 用户手动选择"不匹配—自定义"
+  导出 Excel → 读取关联模板 → 按 _group 字段分组 → 填充模板占位符 → 生成 Excel 文件
+  导入 Excel → 读取关联模板 → 识别组名行/数据行 → 解析数据 → 创建新报价单
 
 [定价表模块]
   新建定价表 → 创建 data/ratecard/{name}.json（空）
   导入 Excel/CSV → 解析写入同一 JSON → 前端 DataTable 预览（如需修改需重新导入）
+
+[模板模块]
+  上传模板 → 存储到 data/template/{filename}.xlsx
+  关联模板 → 更新 project.json 的 template_name 字段
+  导出时 → 读取关联模板 → 填充数据 → 返回 Excel
+  导入时 → 读取关联模板 → 解析 Excel → 返回分组数据
 ```
 
 ## 数据规范

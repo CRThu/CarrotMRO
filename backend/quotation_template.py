@@ -222,6 +222,23 @@ def get_template_info(template: QuotationTemplate) -> dict:
     }
 
 
+def get_template_columns(template: QuotationTemplate) -> list[str]:
+    """提取模板中所有可用的数据列名。
+
+    从 {item.xxx} 占位符中提取 xxx 作为可用列名。
+
+    Returns:
+        列名列表，如 ["物料名称", "数量", "单位", "单价"]
+    """
+    columns = []
+    for name in template.placeholders:
+        if name.startswith("item."):
+            col_name = name[5:]
+            if col_name not in columns:
+                columns.append(col_name)
+    return columns
+
+
 def export_quotation(
     template_content: bytes,
     groups: list[dict],
@@ -408,3 +425,108 @@ def _replace_row_refs(formula: str, current_row: int) -> str:
         return match.group(0)
 
     return PLACEHOLDER_RE.sub(replacer, formula)
+
+
+def import_quotation(
+    template_content: bytes,
+    excel_content: bytes,
+) -> list[dict]:
+    """从 Excel 文件中提取报价单数据。
+
+    根据模板结构识别组名行和数据行，提取数据并按组分组返回。
+
+    Args:
+        template_content: 模板 Excel 文件的二进制内容（用于识别行结构）
+        excel_content: 要导入的 Excel 文件的二进制内容
+
+    Returns:
+        分组数据列表，格式同 export_quotation 的 groups 参数:
+        [
+            {
+                "name": "组名",
+                "items": [
+                    {"name": "项目名称", "unit": "单位", ...},
+                ]
+            }
+        ]
+    """
+    template = load_template(template_content)
+    template_placeholders = template.placeholders
+
+    # 建立列号 → 占位符名称的映射（只关心 group_row 和 data_row）
+    group_col_map: dict[int, str] = {}  # col → "group.name"
+    data_col_map: dict[int, str] = {}   # col → "item.xxx"
+
+    for name, ph in template_placeholders.items():
+        if name.startswith("row"):
+            continue
+        if ph.row == template.group_row:
+            group_col_map[ph.col] = name
+        elif ph.row == template.data_row:
+            data_col_map[ph.col] = name
+
+    # 加载要导入的 Excel
+    wb = openpyxl.load_workbook(BytesIO(excel_content))
+    ws = wb.active
+
+    groups: list[dict] = []
+    current_group: dict | None = None
+    total_rows = ws.max_row
+
+    def _row_has_data(row_idx: int) -> bool:
+        """检查某行的数据列（item.*）是否有值"""
+        for col, name in data_col_map.items():
+            if not name.startswith("item."):
+                continue
+            cell = ws.cell(row=row_idx, column=col)
+            val = cell.value
+            if val is not None:
+                val_str = str(val).strip()
+                if val_str and not val_str.startswith("="):
+                    return True
+        return False
+
+    for row_idx in range(1, total_rows + 1):
+        is_group_row = False
+        if group_col_map and row_idx >= template.group_row:
+            group_val = None
+            for col, name in group_col_map.items():
+                cell = ws.cell(row=row_idx, column=col)
+                val = cell.value
+                if val is not None:
+                    group_val = str(val).strip()
+
+            # 组名行: group.name 有值 + 本行无数据 + 下一行有数据（排除页脚行）
+            if group_val and not _row_has_data(row_idx):
+                next_has_data = _row_has_data(row_idx + 1) if row_idx < total_rows else False
+                if next_has_data:
+                    is_group_row = True
+                    current_group = {
+                        "name": group_val,
+                        "items": [],
+                    }
+                    groups.append(current_group)
+
+        # 尝试识别为数据行: 仅检查 item.* 列
+        if not is_group_row and data_col_map and current_group is not None:
+            item: dict[str, str] = {}
+            has_value = False
+            for col, name in data_col_map.items():
+                if not name.startswith("item."):
+                    continue
+                cell = ws.cell(row=row_idx, column=col)
+                val = cell.value
+                if val is not None:
+                    val_str = str(val).strip()
+                    if val_str.startswith("="):
+                        continue
+                    if val_str:
+                        field_name = name.split(".", 1)[1]
+                        item[field_name] = val_str
+                        has_value = True
+
+            # 如果数据行有值，添加到当前组
+            if has_value and item:
+                current_group["items"].append(item)
+
+    return groups
