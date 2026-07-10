@@ -15,23 +15,25 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 ├── backend/            # 后端 FastAPI 应用
 │   ├── main.py         # 核心 API 路由与服务入口
 │   ├── config.py       # 配置管理（环境变量、目录路径）
-│   ├── photo_ocr.py    # OCR 识别逻辑封装
+│   ├── photo_ocr.py    # OCR 识别逻辑封装（litellm + Xiaomi MiMo）
+│   ├── preset_columns.py # 全局预制列定义
 │   ├── match.py        # 模糊搜索工具（match_names）
-
 │   ├── ratecard_parser.py # 定价表 Excel/CSV 解析器（含 extract_names）
 │   ├── quotation_template.py # 报价单 Excel 模板解析与导出
 │   ├── pyproject.toml  # Python 依赖配置
-│   └── uv.lock         # 依赖锁文件
+│   ├── uv.lock         # 依赖锁文件
+│   └── tests/          # 后端单元测试（pytest）
 ├── frontend/           # 前端 React + Vite 应用
 │   ├── src/
 │   │   ├── App.tsx             # 应用入口，state 管理与布局路由
 │   │   ├── api.ts              # API 接口封装
 │   │   ├── types.ts            # TypeScript 类型定义
+│   │   ├── test/               # 前端测试配置
 │   │   └── components/
 │   │       ├── Sidebar.tsx         # 侧边栏导航组件
 │   │       ├── SidebarTree.tsx     # 树形导航基础组件（SidebarSection、TreeItem）
 │   │       ├── ProjectWorkspace.tsx # 项目工作区（OCR 数据编辑）
-│   │       ├── ProjectConfigWorkspace.tsx # 项目配置工作区（关联定价表）
+│   │       ├── ProjectConfigWorkspace.tsx # 项目配置工作区（关联定价表、列映射）
 │   │       ├── RateCardWorkspace.tsx # 定价表工作区
 │   │       ├── QuotationWorkspace.tsx # 报价单工作区（含匹配功能）
 │   │       ├── MatchPopover.tsx    # 匹配候选选择弹窗（点击图标选择清单名称）
@@ -39,7 +41,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   │       ├── ErrorBoundary.tsx   # 错误边界（显示完整堆栈信息）
 │   │       ├── DataTable.tsx       # 通用数据表格组件
 │   │       └── ui/                 # shadcn/ui 基础组件
+│   ├── vitest.config.js  # Vitest 测试配置
 │   └── vite.config.js  # Vite 配置（含 /api 代理）
+├── e2e/                # 端到端测试（Playwright）
 ├── data/               # 数据存储目录（自动定位，可通过 .env 覆盖）
 │   ├── projects/       # 项目数据及 OCR 结果存储
 │   ├── ratecard/       # 协议定价表 JSON 文件（*.json）
@@ -60,10 +64,11 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
   | `GET` | `/api/projects` | 获取所有项目列表 |
   | `POST` | `/api/projects/{name}` | 创建新项目（生成目录 + `project.json`） |
   | `GET` | `/api/projects/{name}` | 获取项目基本信息 |
+  | `GET` | `/api/preset-columns` | 获取全局预制列列表 |
   | `PATCH` | `/api/projects/{name}/ratecard` | 关联/解除关联定价表 |
   | `PATCH` | `/api/projects/{name}/template` | 关联/解除关联模板 |
-  | `GET` | `/api/projects/{name}/columns` | 获取项目列配置（可用列 + 已选列） |
-  | `PATCH` | `/api/projects/{name}/columns` | 设置项目选中的列 |
+  | `GET` | `/api/projects/{name}/columns` | 获取项目列配置（可用列 + 已选列 + 列映射） |
+  | `PATCH` | `/api/projects/{name}/columns` | 设置项目选中的列和列映射 |
   | `POST` | `/api/projects/{name}/ocr` | 上传图片启动 OCR 异步识别 |
   | `GET` | `/api/tasks/{task_id}` | 轮询 OCR 任务状态（完成时返回 `columns` 和 `result`） |
   | `GET` | `/api/projects/{name}/ocr-files` | 获取项目下的 OCR 结果文件列表 |
@@ -98,9 +103,9 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 序号  !项目名称  !单位  数量  !综合单价  ?税率
 ```
 
-**Alias 自动映射**:
-- 列名包含"名称" → 自动 alias 为 `name`（必须存在）
-- 若无列匹配"名称" → 第一个 `!` 列作为 `name`
+**Alias 说明**:
+- `alias` 字段保留但不再自动设置（已移除自动映射逻辑）
+- 列名由用户在项目配置中手动映射到预制列
 - 其他列不做自动映射，保留原始列名
 
 **行跳过逻辑**: 任意一个 `!` 列为空 → 跳过该行（分类行/小计行自动过滤）
@@ -109,7 +114,7 @@ Excel/CSV 的表头行使用前缀标记列的匹配属性：
 ```json
 {
   "columns": [
-    {"name": "项目名称", "strict": true, "alias": "name"},
+    {"name": "项目名称", "strict": true, "alias": null},
     {"name": "单位", "strict": true, "alias": null},
     {"name": "综合单价", "strict": true, "alias": null},
     {"name": "税率", "strict": false, "alias": null}
@@ -246,7 +251,8 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
 ## 数据规范
 
 - **统一 key**: 所有 items 的 key 统一使用 `col.name`（中文列名），前后端一致。`col.alias` 仅用于跨表匹配（如报价单名称匹配定价表时的关联）。
-- **OCR 数据映射**: Gemini API 返回英文 key（`name`/`quantity`/`unit`/`unit_price`），后端 `_remap_ocr_items()` 在存储和读取时映射为中文列名（`项目`/`数量`/`单位`/`单价`），确保与 `OCR_COLUMNS` 一致。
+- **OCR 数据映射**: litellm + Xiaomi MiMo 模型返回 JSON 数据，后端按 `column_mappings` 中的配置将模板列名映射为预制列名。
+- **预制列映射**: 每个项目支持三个独立的映射（ocr、ratecard、quotation），存储在 `project.json` 的 `column_mappings` 字段中。
 
 ## 运行与开发指南
 1.  **环境管理**:
@@ -259,6 +265,10 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
     - **开发模式**: 双击 `dev.bat`，自动并行启动 FastAPI（端口 8000，热重载）和 Vite（端口 5173，代理 `/api`）。
     - **生产模式**: 双击 `run.bat` 启动 FastAPI（端口 8000），前端需先 `build.bat` 构建。
     - **仅构建前端**: 双击 `build.bat`，将 React 构建产物复制到 `backend/static/`。
+4.  **测试**:
+    - **后端单元测试**: `cd backend && uv run pytest -v`
+    - **前端单元测试**: `cd frontend && bunx vitest run`
+    - **端到端测试**: `cd e2e && npx playwright test`
 
 ## 文档维护规范
 为了确保文档始终反映系统实际状态，遵循以下原则：

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MatchPopover } from '@/components/MatchPopover';
-import { RateCardTableData, TableItem } from '@/types';
+import { RateCardTableData, QuotationItem, ColumnMapping, TableItem } from '@/types';
 import * as api from '@/api';
 import { Save, Upload } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,11 +16,6 @@ interface MatchCandidate {
   values: string[];
 }
 
-interface QuotationItem extends TableItem {
-  _matchStatus?: 'pending' | 'matched' | 'custom';
-  '清单名称'?: string;
-}
-
 interface QuotationWorkspaceProps {
   currentProject: string;
   activeQuotationFilename: string;
@@ -29,6 +24,7 @@ interface QuotationWorkspaceProps {
   projectRateCard: string | null;
   ratecardTableData: RateCardTableData;
   selectedColumns: string[];
+  quotationMapping: ColumnMapping;
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (index: number) => void;
@@ -36,11 +32,20 @@ interface QuotationWorkspaceProps {
   onQuotationDataChange: (items: QuotationItem[]) => void;
 }
 
-const computeTotal = (item: TableItem): string => {
+const computeTotal = (item: Record<string, string>): string => {
   const qty = parseFloat(item['数量'] ?? '');
   const price = parseFloat(item['单价'] ?? '');
   if (isNaN(qty) || isNaN(price)) return '';
   return (qty * price).toFixed(2);
+};
+
+// 预制列标签到报价单字段名的映射
+const PRESET_LABEL_TO_QUOTATION_FIELD: Record<string, string> = {
+  '项目名称': '项目名称',
+  '数量': '数量',
+  '单位': '单位',
+  '单价': '单价',
+  '备注': '备注',
 };
 
 export function QuotationWorkspace({
@@ -51,6 +56,7 @@ export function QuotationWorkspace({
   projectRateCard,
   ratecardTableData,
   selectedColumns: _selectedColumns,
+  quotationMapping,
   onEdit,
   onAddRow,
   onDeleteRow,
@@ -69,7 +75,7 @@ export function QuotationWorkspace({
     }
   }, [ocrFiles, selectedOcrFile]);
 
-  const displayItems = quotationItems.map((item, i) => ({
+  const displayItems: Record<string, string>[] = quotationItems.map((item, i) => ({
     ...item,
     '序号': String(i + 1),
     '合计': computeTotal(item),
@@ -84,18 +90,8 @@ export function QuotationWorkspace({
       const fileData = raw.data || raw;
       const ocrItems: TableItem[] = Array.isArray(fileData.items) ? fileData.items : [];
 
-      const OCR_TO_QUOTATION: Record<string, string> = {
-        '项目名称': '项目名称',
-        '名称': '项目名称',
-        '物料名称': '项目名称',
-        '项目': '项目名称',
-        '单位': '单位',
-        '数量': '数量',
-        '单价': '单价',
-        '参考单价': '单价',
-        '综合单价': '单价',
-      };
-
+      // 使用用户配置的报价单映射来转换 OCR 数据
+      // quotationMapping: { ocr列名 → 预制列标签 }
       const newItems: QuotationItem[] = ocrItems.map((ocrItem: TableItem) => {
         const mapped: QuotationItem = {
           '项目名称': '',
@@ -106,9 +102,12 @@ export function QuotationWorkspace({
           _matchStatus: 'pending',
           '清单名称': '',
         };
-        for (const [key, val] of Object.entries(ocrItem)) {
-          const target = OCR_TO_QUOTATION[key];
-          if (target) mapped[target] = val || '';
+        for (const [ocrCol, ocrVal] of Object.entries(ocrItem)) {
+          const presetLabel = quotationMapping[ocrCol];
+          if (presetLabel) {
+            const field = PRESET_LABEL_TO_QUOTATION_FIELD[presetLabel];
+            if (field) mapped[field] = ocrVal || '';
+          }
         }
         if (!importUnitPrice) mapped['单价'] = '';
         return mapped;
@@ -132,13 +131,19 @@ export function QuotationWorkspace({
       const rcColumns = ratecardTableData.columns || [];
       const rcItems = ratecardTableData.items || [];
 
+      // 使用用户配置的定价表映射来确定 name 列
+      // 查找映射到"项目名称"的定价表列
       let nameCol: string | null = null;
+      // 从 ratecardMapping 中查找（这里简化处理：查找 alias="name" 或第一列）
       for (const col of rcColumns) {
         if (col.alias === 'name') { nameCol = col.name; break; }
       }
+      if (!nameCol && rcColumns.length > 0) {
+        nameCol = rcColumns[0].name;
+      }
       if (!nameCol) { setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: false })); return; }
 
-      const displayCols = rcColumns.filter((c: any) => c.alias !== 'name');
+      const displayCols = rcColumns.filter((c: any) => c.name !== nameCol);
       const colNames = displayCols.map((c: any) => c.name);
 
       const candidates: MatchCandidate[] = matches
@@ -159,11 +164,10 @@ export function QuotationWorkspace({
 
   const handleSelectCandidate = (itemIndex: number, candidate: MatchCandidate) => {
     const item = quotationItems[itemIndex];
-    const priceIdx = candidate.columns.findIndex(c => c.includes('单价') || c.includes('价格'));
+    // 用户手动选择匹配候选，不做自动检测
     const newItems = [...quotationItems];
     newItems[itemIndex] = {
       ...item,
-      '单价': priceIdx >= 0 ? candidate.values[priceIdx] : '',
       _matchStatus: 'matched' as const,
       '清单名称': candidate.name,
     };

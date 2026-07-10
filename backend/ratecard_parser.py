@@ -52,7 +52,6 @@ def _parse_rows(rows: list[tuple]) -> dict:
         raise ValueError("未找到标记行（表头需包含 ! 或 ? 前缀）")
 
     columns = _parse_columns(rows[header_idx])
-    _assign_name_alias(columns)
 
     items = _read_data_rows(rows, header_idx, columns)
 
@@ -87,23 +86,13 @@ def _parse_columns(header_row: tuple) -> list[dict]:
         col_name = s.lstrip("!?").strip()
         if not col_name:
             continue
-        alias = "name" if "名称" in col_name else None
         columns.append({
             "col_idx": col_idx,
             "name": col_name,
             "strict": strict,
-            "alias": alias,
+            "alias": None,
         })
     return columns
-
-
-def _assign_name_alias(columns: list[dict]):
-    if any(c["alias"] == "name" for c in columns):
-        return
-    for col in columns:
-        if col["strict"]:
-            col["alias"] = "name"
-            return
 
 
 def _read_data_rows(rows: list[tuple], header_idx: int, columns: list[dict]) -> list[dict]:
@@ -157,23 +146,21 @@ if __name__ == "__main__":
         print(f"  {tag}{col['name']}{alias_tag}")
 
 
-def extract_names(columns: list[dict], items: list[dict]) -> list[str]:
-    """从定价表数据中提取 name 列的值"""
-    name_col = None
+def extract_names(columns: list[dict], items: list[dict], name_column: str | None = None) -> list[str]:
+    """从定价表数据中提取 name 列的值。
+
+    Args:
+        columns: 定价表列定义列表
+        items: 定价表数据行列表
+        name_column: 显式指定的列名（用户手动映射）。如果为 None，尝试查找 alias="name" 的列。
+    """
+    # 优先使用显式指定的列名
+    if name_column:
+        return [item[name_column] for item in items if name_column in item]
+
+    # 兼容旧逻辑：查找 alias="name" 的列
     for col in columns:
         if col.get("alias") == "name":
-            name_col = col["name"]
-            break
-    if name_col is None:
-        for col in columns:
-            if "名称" in col["name"]:
-                name_col = col["name"]
-                break
-    if name_col is None and columns:
-        for col in columns:
-            if col.get("strict"):
-                name_col = col["name"]
-                break
-    if name_col is None:
-        return []
-    return [item[name_col] for item in items if name_col in item]
+            return [item[col["name"]] for item in items if col["name"] in item]
+
+    return []

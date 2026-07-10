@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+// ===== 预制列相关 =====
+export const getPresetColumns = () => axios.get('/api/preset-columns');
+
 // ===== 项目相关 =====
 export const getProjects = () => axios.get('/api/projects');
 export const createProject = (name: string) => axios.post(`/api/projects/${name}`);
@@ -43,8 +46,8 @@ export const deleteTemplate = (filename: string) => axios.delete(`/api/templates
 export const updateProjectTemplate = (projectName: string, templateName: string | null) =>
   axios.patch(`/api/projects/${projectName}/template`, { template_name: templateName });
 export const getProjectColumns = (projectName: string) => axios.get(`/api/projects/${projectName}/columns`);
-export const updateProjectColumns = (projectName: string, columns: string[]) =>
-  axios.patch(`/api/projects/${projectName}/columns`, { columns });
+export const updateProjectColumns = (projectName: string, body: { columns: string[]; scope?: string; column_mapping?: Record<string, string> }) =>
+  axios.patch(`/api/projects/${projectName}/columns`, body);
 
 // ===== 报价单导入导出 =====
 export const exportQuotation = (projectName: string, filename: string) =>

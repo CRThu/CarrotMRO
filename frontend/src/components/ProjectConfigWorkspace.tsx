@@ -1,7 +1,14 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Upload, Trash2, CheckSquare, Square } from 'lucide-react';
+import { PresetColumn, ColumnMappings, MappingScope } from '@/types';
+
+const SCOPE_LABELS: Record<MappingScope, string> = {
+  ocr: 'OCR 识别',
+  ratecard: '定价表',
+  quotation: '报价单',
+};
 
 interface ProjectConfigWorkspaceProps {
   currentProject: string;
@@ -11,9 +18,12 @@ interface ProjectConfigWorkspaceProps {
   templates: string[];
   availableColumns: string[];
   selectedColumns: string[];
+  presetColumns: PresetColumn[];
+  columnMappings: ColumnMappings;
   onUpdateRateCard: (name: string) => Promise<void>;
   onUpdateTemplate: (templateName: string) => Promise<void>;
   onUpdateColumns: (columns: string[]) => Promise<void>;
+  onUpdateColumnMapping: (scope: MappingScope, mapping: Record<string, string>) => Promise<void>;
   onUploadTemplate: (file: File) => Promise<void>;
   onDeleteTemplate: (filename: string) => Promise<void>;
 }
@@ -26,13 +36,17 @@ export function ProjectConfigWorkspace({
   templates,
   availableColumns,
   selectedColumns,
+  presetColumns,
+  columnMappings,
   onUpdateRateCard,
   onUpdateTemplate,
   onUpdateColumns,
+  onUpdateColumnMapping,
   onUploadTemplate,
   onDeleteTemplate,
 }: ProjectConfigWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeMappingScope, setActiveMappingScope] = useState<MappingScope>('ocr');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,6 +62,24 @@ export function ProjectConfigWorkspace({
       : [...selectedColumns, col];
     onUpdateColumns(next);
   };
+
+  const handleMappingChange = (presetLabel: string, templateCol: string) => {
+    const currentMapping = columnMappings[activeMappingScope] || {};
+    const next = { ...currentMapping };
+    if (templateCol) {
+      next[templateCol] = presetLabel;
+    } else {
+      for (const [k, v] of Object.entries(next)) {
+        if (v === presetLabel) {
+          delete next[k];
+          break;
+        }
+      }
+    }
+    onUpdateColumnMapping(activeMappingScope, next);
+  };
+
+  const currentMapping = columnMappings[activeMappingScope] || {};
 
   return (
     <>
@@ -154,6 +186,68 @@ export function ProjectConfigWorkspace({
             </div>
             {selectedColumns.length === 0 && (
               <p className="text-sm text-amber-600 mt-2">请至少选择一列，否则无法进行 OCR 识别</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {projectTemplate && selectedColumns.length > 0 && presetColumns.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>预制列映射</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 mb-4">
+              {(Object.keys(SCOPE_LABELS) as MappingScope[]).map(scope => (
+                <button
+                  key={scope}
+                  onClick={() => setActiveMappingScope(scope)}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                    activeMappingScope === scope
+                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                  }`}
+                >
+                  {SCOPE_LABELS[scope]}
+                </button>
+              ))}
+            </div>
+
+            <p className="text-sm text-gray-500 mb-3">
+              为「{SCOPE_LABELS[activeMappingScope]}」场景配置列映射：
+            </p>
+            <div className="space-y-3">
+              {presetColumns.map(preset => {
+                const mappedTemplateCol = Object.entries(currentMapping).find(
+                  ([, v]) => v === preset.label
+                )?.[0] || '';
+                return (
+                  <div key={preset.key} className="flex items-center gap-3">
+                    <span className={`text-sm w-24 ${preset.required ? 'font-medium text-gray-800' : 'text-gray-600'}`}>
+                      {preset.label}
+                      {preset.required && <span className="text-red-500 ml-0.5">*</span>}
+                    </span>
+                    <span className="text-gray-400">←</span>
+                    <select
+                      value={mappedTemplateCol}
+                      onChange={(e) => handleMappingChange(preset.label, e.target.value)}
+                      className="flex-1 p-1.5 border rounded text-sm"
+                    >
+                      <option value="">未映射</option>
+                      {selectedColumns.map(col => (
+                        <option key={col} value={col}>{col}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+            {presetColumns.filter(p => p.required).some(p =>
+              !Object.values(currentMapping).includes(p.label)
+            ) && (
+              <p className="text-sm text-amber-600 mt-3">
+                请确保所有必填预制列（项目名称、数量、单位）已映射
+              </p>
             )}
           </CardContent>
         </Card>

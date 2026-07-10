@@ -15,6 +15,7 @@ from config import settings
 from photo_ocr import ocr_images
 from ratecard_parser import parse_ratecard_file, extract_names
 from match import match_names
+from preset_columns import get_preset_columns
 from quotation_template import (
     load_template,
     get_template_info,
@@ -104,6 +105,12 @@ def write_ratecard_data(ratecard_name: str, data: dict):
 
 # ========== 路由：协议定价表 ==========
 
+@app.get("/api/preset-columns")
+async def get_preset_columns_api():
+    """获取全局预制列列表"""
+    return {"columns": get_preset_columns()}
+
+
 @app.get("/api/ratecards")
 async def get_ratecards():
     """获取所有定价表列表"""
@@ -157,6 +164,7 @@ async def match_ratecard(body: dict):
     ratecard_name = body.get("ratecard_name")
     queries = body.get("queries", [])
     limit = body.get("limit", 5)
+    name_column = body.get("name_column")
 
     if not ratecard_name:
         raise HTTPException(status_code=400, detail="ratecard_name 不能为空")
@@ -167,11 +175,14 @@ async def match_ratecard(body: dict):
     if not path.exists():
         raise HTTPException(status_code=404, detail="定价表不存在")
 
-    names = _names_cache.get(ratecard_name)
+    # 如果指定了 name_column，不使用缓存（因为不同的 name_column 会得到不同的结果）
+    cache_key = f"{ratecard_name}:{name_column or ''}"
+    names = _names_cache.get(cache_key) if not name_column else None
     if names is None:
         data = read_ratecard_data(ratecard_name)
-        names = extract_names(data.get("columns", []), data.get("items", []))
-        _names_cache[ratecard_name] = names
+        names = extract_names(data.get("columns", []), data.get("items", []), name_column=name_column)
+        if not name_column:
+            _names_cache[cache_key] = names
 
     results = match_names(names, queries, limit=limit)
     return results
@@ -210,17 +221,19 @@ async def get_ocr_files(project_name: str):
 
 
 @app.post("/api/projects/{project_name}")
-async def create_project(project_name: str):
+async def create_project(project_name: str, body: dict = None):
     project_dir = PROJECT_BASE_DIR / project_name
     if project_dir.exists():
         raise HTTPException(status_code=400, detail="项目已存在")
     project_dir.mkdir(parents=True)
+    body = body or {}
     project_info = {
         "name": project_name,
         "created_at": datetime.now().isoformat(),
         "ratecard_name": None,
         "template_name": None,
         "selected_columns": [],
+        "column_mappings": body.get("column_mappings", {"ocr": {}, "ratecard": {}, "quotation": {}}),
     }
     json_path = project_dir / "project.json"
     with open(json_path, "w", encoding="utf-8") as f:
@@ -457,13 +470,15 @@ async def update_project_template(project_name: str, body: dict):
         if not template_path.exists():
             raise HTTPException(status_code=404, detail="模板不存在")
     project_info["template_name"] = template_name or None
-    # 关联模板时默认全选所有可用列
+    # 关联模板时默认全选所有可用列，重置所有映射
     if template_name:
         template_path = TEMPLATE_DIR / template_name
         template = load_template(template_path.read_bytes())
         project_info["selected_columns"] = get_template_columns(template)
+        project_info["column_mappings"] = {"ocr": {}, "ratecard": {}, "quotation": {}}
     else:
         project_info["selected_columns"] = []
+        project_info["column_mappings"] = {"ocr": {}, "ratecard": {}, "quotation": {}}
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(project_info, f, ensure_ascii=False, indent=2)
     return {"message": "模板关联更新成功"}
@@ -471,7 +486,7 @@ async def update_project_template(project_name: str, body: dict):
 
 @app.patch("/api/projects/{project_name}/columns")
 async def update_project_columns(project_name: str, body: dict):
-    """设置项目选中的列"""
+    """设置项目选中的列和列映射"""
     json_path = PROJECT_BASE_DIR / project_name / "project.json"
     if not json_path.exists():
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -494,9 +509,22 @@ async def update_project_columns(project_name: str, body: dict):
         raise HTTPException(status_code=400, detail=f"无效的列名: {', '.join(invalid)}")
 
     project_info["selected_columns"] = selected
+
+    # 更新指定 scope 的列映射（如果有提供）
+    scope = body.get("scope")
+    mapping = body.get("column_mapping")
+    if scope and mapping is not None:
+        if "column_mappings" not in project_info:
+            project_info["column_mappings"] = {"ocr": {}, "ratecard": {}, "quotation": {}}
+        project_info["column_mappings"][scope] = mapping
+
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(project_info, f, ensure_ascii=False, indent=2)
-    return {"message": "列配置更新成功", "selected_columns": selected}
+    return {
+        "message": "列配置更新成功",
+        "selected_columns": selected,
+        "column_mappings": project_info.get("column_mappings", {}),
+    }
 
 
 @app.get("/api/projects/{project_name}/columns")
@@ -516,9 +544,16 @@ async def get_project_columns(project_name: str):
             template = load_template(template_path.read_bytes())
             available_columns = get_template_columns(template)
 
+    # 兼容旧格式：如果没有 column_mappings 但有 column_mapping，转换一下
+    column_mappings = project_info.get("column_mappings")
+    if column_mappings is None:
+        old = project_info.get("column_mapping", {})
+        column_mappings = {"ocr": old, "ratecard": {}, "quotation": {}}
+
     return {
         "available_columns": available_columns,
         "selected_columns": project_info.get("selected_columns", []),
+        "column_mappings": column_mappings,
     }
 
 

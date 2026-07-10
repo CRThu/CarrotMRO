@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '@/api';
-import { OcrTableData, RateCardTableData, RateCardColumn, TableItem, QuotationItem } from '@/types';
+import { OcrTableData, RateCardTableData, RateCardColumn, TableItem, QuotationItem, PresetColumn, ColumnMappings, MappingScope } from '@/types';
 import { Sidebar } from '@/components/Sidebar';
 import { ProjectWorkspace } from '@/components/ProjectWorkspace';
 import { ProjectConfigWorkspace } from '@/components/ProjectConfigWorkspace';
@@ -34,6 +34,8 @@ function App() {
   const [templates, setTemplates] = useState<string[]>([]);
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+  const [presetColumns, setPresetColumns] = useState<PresetColumn[]>([]);
+  const [columnMappings, setColumnMappings] = useState<ColumnMappings>({ ocr: {}, ratecard: {}, quotation: {} });
 
   const toColumns = (cols: any): RateCardColumn[] => {
     if (!Array.isArray(cols)) return [];
@@ -46,7 +48,9 @@ function App() {
   const fetchOcrFiles = async (projectName: string) => { try { const res = await api.getOcrFiles(projectName); setOcrFiles(res.data.files); } catch (err) { console.error(err); } };
   const fetchQuotationFiles = async (projectName: string) => { try { const res = await api.getQuotations(projectName); setQuotationFiles(res.data.files); } catch (err) { console.error(err); } };
 
-  useEffect(() => { fetchProjects(); fetchRateCards(); fetchTemplates(); }, []);
+  useEffect(() => { fetchProjects(); fetchRateCards(); fetchTemplates(); fetchPresetColumns(); }, []);
+
+  const fetchPresetColumns = async () => { try { const res = await api.getPresetColumns(); setPresetColumns(res.data.columns || []); } catch (err) { console.error(err); } };
 
   useEffect(() => {
     if (currentProject) {
@@ -58,6 +62,7 @@ function App() {
       setProjectTemplate(null);
       setAvailableColumns([]);
       setSelectedColumns([]);
+      setColumnMappings({ ocr: {}, ratecard: {}, quotation: {} });
       api.getProjectInfo(currentProject).then(res => {
         setProjectRateCard(res.data.ratecard_name);
         setProjectTemplate(res.data.template_name);
@@ -65,7 +70,8 @@ function App() {
       api.getProjectColumns(currentProject).then(res => {
         setAvailableColumns(res.data.available_columns || []);
         setSelectedColumns(res.data.selected_columns || []);
-      }).catch(() => { setAvailableColumns([]); setSelectedColumns([]); });
+        setColumnMappings(res.data.column_mappings || { ocr: {}, ratecard: {}, quotation: {} });
+      }).catch(() => { setAvailableColumns([]); setSelectedColumns([]); setColumnMappings({ ocr: {}, ratecard: {}, quotation: {} }); });
       setTableData({ columns: [], items: [], remarks: '' });
     }
   }, [currentProject]);
@@ -314,10 +320,20 @@ function App() {
   const handleUpdateSelectedColumns = async (columns: string[]) => {
     if (!currentProject) return;
     try {
-      await api.updateProjectColumns(currentProject, columns);
+      await api.updateProjectColumns(currentProject, { columns });
       setSelectedColumns(columns);
     } catch (err: any) {
       alert("列配置失败: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUpdateColumnMapping = async (scope: MappingScope, mapping: Record<string, string>) => {
+    if (!currentProject) return;
+    try {
+      await api.updateProjectColumns(currentProject, { columns: selectedColumns, scope, column_mapping: mapping });
+      setColumnMappings(prev => ({ ...prev, [scope]: mapping }));
+    } catch (err: any) {
+      alert("列映射失败: " + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -429,6 +445,7 @@ function App() {
             projectRateCard={projectRateCard}
             ratecardTableData={ratecardTableData}
             selectedColumns={selectedColumns}
+            quotationMapping={columnMappings.quotation || {}}
             onEdit={handleQuotationEdit}
             onAddRow={handleQuotationAddRow}
             onDeleteRow={handleQuotationDeleteRow}
@@ -458,12 +475,15 @@ function App() {
             templates={templates}
             availableColumns={availableColumns}
             selectedColumns={selectedColumns}
+            presetColumns={presetColumns}
+            columnMappings={columnMappings}
             onUpdateRateCard={async (name) => {
               await api.updateProjectRateCard(currentProject!, name);
               setProjectRateCard(name);
             }}
             onUpdateTemplate={handleUpdateProjectTemplate}
             onUpdateColumns={handleUpdateSelectedColumns}
+            onUpdateColumnMapping={handleUpdateColumnMapping}
             onUploadTemplate={handleUploadTemplate}
             onDeleteTemplate={handleDeleteTemplate}
           />

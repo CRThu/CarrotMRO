@@ -1,4 +1,4 @@
-import { SidebarSection, TreeItem, Folder, FolderOpen, ScanLine, FileText, Receipt, Settings } from '@/components/SidebarTree';
+import { SidebarSection, TreeItem, Folder, FolderOpen, ScanLine, FileText, Receipt } from '@/components/SidebarTree';
 
 interface SidebarProps {
   projects: string[];

@@ -3,11 +3,9 @@ from pathlib import Path
 
 
 class Settings(BaseSettings):
-    # Gemini OCR
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.1-flash-lite"
-    gemini_prompt: str = ""
-    gemini_json_schema: str = ""
+    # litellm OCR
+    litellm_model: str = "xiaomi_mimo/mimo-v2-flash"
+    xiaomi_mimo_api_key: str = ""
     proxy: str = ""
 
     # 数据目录
