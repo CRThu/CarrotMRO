@@ -1,14 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { loadSettings, getSettings, saveSettings } from './settings.js';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { loadSettings, saveSettings } from './settings.js';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 
 const SETTINGS_FILE = path.join(process.cwd(), 'data', 'settings.json');
+let originalContent: string | null = null;
 
 describe('Settings Service (data/settings.json)', () => {
+  beforeAll(async () => {
+    // 备份用户真实的 settings.json 文件，避免测试执行破坏真实配置
+    if (fsSync.existsSync(SETTINGS_FILE)) {
+      originalContent = await fs.readFile(SETTINGS_FILE, 'utf-8').catch(() => null);
+    }
+  });
+
+  afterAll(async () => {
+    // 还原用户真实的 settings.json 文件
+    if (originalContent !== null) {
+      await fs.writeFile(SETTINGS_FILE, originalContent, 'utf-8').catch(() => {});
+    }
+  });
+
   beforeEach(async () => {
-    // 单元测试前清除缓存文件
+    // 测试前临时清理
     if (fsSync.existsSync(SETTINGS_FILE)) {
       await fs.unlink(SETTINGS_FILE).catch(() => {});
     }
@@ -66,5 +81,4 @@ describe('Settings Service (data/settings.json)', () => {
     expect(loaded.llm.activeProvider).toBe('mimo');
     expect(loaded.llm.providers.mimo.apiKey).toBe('mimo-key-999');
   });
-
 });

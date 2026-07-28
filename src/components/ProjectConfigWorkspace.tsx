@@ -1,52 +1,29 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Upload, Trash2, CheckSquare, Square } from 'lucide-react';
-import { PresetColumn, ColumnMappings, MappingScope } from '@/types';
-
-const SCOPE_LABELS: Record<MappingScope, string> = {
-  ocr: 'OCR 识别',
-  ratecard: '定价表',
-  quotation: '报价单',
-};
+import { PRESET_COLUMNS, ProjectSettings } from '@/types';
 
 interface ProjectConfigWorkspaceProps {
   currentProject: string;
-  projectRateCard: string | null;
+  settings: ProjectSettings;
   rateCards: string[];
-  projectTemplate: string | null;
   templates: string[];
-  availableColumns: string[];
-  selectedColumns: string[];
-  presetColumns: PresetColumn[];
-  columnMappings: ColumnMappings;
-  onUpdateRateCard: (name: string) => Promise<void>;
-  onUpdateTemplate: (templateName: string) => Promise<void>;
-  onUpdateColumns: (columns: string[]) => Promise<void>;
-  onUpdateColumnMapping: (scope: MappingScope, mapping: Record<string, string>) => Promise<void>;
+  onUpdateSettings: (updated: Partial<ProjectSettings>) => Promise<void>;
   onUploadTemplate: (file: File) => Promise<void>;
   onDeleteTemplate: (filename: string) => Promise<void>;
 }
 
 export function ProjectConfigWorkspace({
   currentProject,
-  projectRateCard,
+  settings,
   rateCards,
-  projectTemplate,
   templates,
-  availableColumns,
-  selectedColumns,
-  presetColumns,
-  columnMappings,
-  onUpdateRateCard,
-  onUpdateTemplate,
-  onUpdateColumns,
-  onUpdateColumnMapping,
+  onUpdateSettings,
   onUploadTemplate,
   onDeleteTemplate,
 }: ProjectConfigWorkspaceProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeMappingScope, setActiveMappingScope] = useState<MappingScope>('ocr');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,56 +33,54 @@ export function ProjectConfigWorkspace({
     }
   };
 
-  const toggleColumn = (col: string) => {
-    const next = selectedColumns.includes(col)
-      ? selectedColumns.filter(c => c !== col)
-      : [...selectedColumns, col];
-    onUpdateColumns(next);
+  const toggleOcrColumn = (col: string) => {
+    const current = settings.ocr_columns || [];
+    const next = current.includes(col)
+      ? current.filter(c => c !== col)
+      : [...current, col];
+    onUpdateSettings({ ocr_columns: next });
   };
 
-  const handleMappingChange = (presetLabel: string, templateCol: string) => {
-    const currentMapping = columnMappings[activeMappingScope] || {};
-    const next = { ...currentMapping };
-    if (templateCol) {
-      next[templateCol] = presetLabel;
-    } else {
-      for (const [k, v] of Object.entries(next)) {
-        if (v === presetLabel) {
-          delete next[k];
-          break;
-        }
-      }
-    }
-    onUpdateColumnMapping(activeMappingScope, next);
+  const toggleQuotationColumn = (col: string) => {
+    const current = settings.quotation_columns || [];
+    const next = current.includes(col)
+      ? current.filter(c => c !== col)
+      : [...current, col];
+    onUpdateSettings({ quotation_columns: next });
   };
-
-  const currentMapping = columnMappings[activeMappingScope] || {};
 
   return (
-    <>
-      <h1 className="text-3xl font-light mb-8 text-gray-700">项目: {currentProject}</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-light text-gray-800">项目设置: {currentProject}</h1>
+          <p className="text-sm text-gray-500 mt-1">管理项目关联的定价单、导出模板以及提取与展示列规范</p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+        {/* 关联协议定价表 */}
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>协议定价表</CardTitle>
+            <CardTitle className="text-lg font-medium">关联协议定价表</CardTitle>
           </CardHeader>
           <CardContent>
-            <label className="block text-sm text-gray-600 mb-2">关联协议定价表:</label>
+            <label className="block text-sm text-gray-600 mb-2">选择在报价单中比对计价的定价表:</label>
             <select
-              value={projectRateCard || ''}
-              onChange={(e) => onUpdateRateCard(e.target.value)}
-              className="w-full p-2 border rounded-lg"
+              value={settings.ratecard_name || ''}
+              onChange={(e) => onUpdateSettings({ ratecard_name: e.target.value || null })}
+              className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="">未关联</option>
+              <option value="">未关联 (暂不比对)</option>
               {rateCards.map(rc => <option key={rc} value={rc}>{rc}</option>)}
             </select>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* 关联报价单 Excel 模板 */}
+        <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>报价单模板</CardTitle>
+            <CardTitle className="text-lg font-medium">关联报价单 Excel 模板</CardTitle>
             <div>
               <input
                 ref={fileInputRef}
@@ -119,27 +94,27 @@ export function ProjectConfigWorkspace({
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="h-4 w-4 mr-1" />
+                <Upload className="h-4 w-4 mr-1.5" />
                 上传模板
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <label className="block text-sm text-gray-600 mb-2">关联模板:</label>
+            <label className="block text-sm text-gray-600 mb-2">选择导出 Excel 报价单时使用的模板:</label>
             <select
-              value={projectTemplate || ''}
-              onChange={(e) => onUpdateTemplate(e.target.value)}
-              className="w-full p-2 border rounded-lg mb-4"
+              value={settings.template_name || ''}
+              onChange={(e) => onUpdateSettings({ template_name: e.target.value || null })}
+              className="w-full p-2.5 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="">未关联</option>
+              <option value="">未关联模板</option>
               {templates.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
 
             {templates.length > 0 && (
-              <div className="border rounded-lg divide-y">
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
                 {templates.map(t => (
-                  <div key={t} className="flex items-center justify-between px-3 py-2">
-                    <span className="text-sm truncate">{t}</span>
+                  <div key={t} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50">
+                    <span className="truncate text-gray-700">{t}</span>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -156,102 +131,75 @@ export function ProjectConfigWorkspace({
         </Card>
       </div>
 
-      {projectTemplate && availableColumns.length > 0 && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>OCR 识别列配置</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-500 mb-3">
-              勾选需要识别的列，OCR 将只提取这些字段：
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {availableColumns.map(col => {
-                const checked = selectedColumns.includes(col);
-                return (
-                  <button
-                    key={col}
-                    onClick={() => toggleColumn(col)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${
-                      checked
-                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                    }`}
-                  >
-                    {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    {col}
-                  </button>
-                );
-              })}
-            </div>
-            {selectedColumns.length === 0 && (
-              <p className="text-sm text-amber-600 mt-2">请至少选择一列，否则无法进行 OCR 识别</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {projectTemplate && selectedColumns.length > 0 && presetColumns.length > 0 && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>预制列映射</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2 mb-4">
-              {(Object.keys(SCOPE_LABELS) as MappingScope[]).map(scope => (
+      {/* OCR 图像抽取识别列配置 */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-medium flex items-center justify-between">
+            <span>OCR 图像识别提取列规范</span>
+            <span className="text-xs font-normal text-gray-400">已选中 {(settings.ocr_columns || []).length} / {PRESET_COLUMNS.length} 列</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500 mb-4">
+            在报价单中使用“图片 OCR 识别导入”时，大模型将严格提取以下勾选的字段：
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {PRESET_COLUMNS.map(col => {
+              const checked = (settings.ocr_columns || []).includes(col);
+              return (
                 <button
-                  key={scope}
-                  onClick={() => setActiveMappingScope(scope)}
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    activeMappingScope === scope
-                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                  key={col}
+                  type="button"
+                  onClick={() => toggleOcrColumn(col)}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    checked
+                      ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
-                  {SCOPE_LABELS[scope]}
+                  <span>{col}</span>
+                  {checked ? <CheckSquare className="h-4 w-4 text-blue-600 ml-1.5" /> : <Square className="h-4 w-4 text-gray-300 ml-1.5" />}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-            <p className="text-sm text-gray-500 mb-3">
-              为「{SCOPE_LABELS[activeMappingScope]}」场景配置列映射：
-            </p>
-            <div className="space-y-3">
-              {presetColumns.map(preset => {
-                const mappedTemplateCol = Object.entries(currentMapping).find(
-                  ([, v]) => v === preset.label
-                )?.[0] || '';
-                return (
-                  <div key={preset.key} className="flex items-center gap-3">
-                    <span className={`text-sm w-24 ${preset.required ? 'font-medium text-gray-800' : 'text-gray-600'}`}>
-                      {preset.label}
-                      {preset.required && <span className="text-red-500 ml-0.5">*</span>}
-                    </span>
-                    <span className="text-gray-400">←</span>
-                    <select
-                      value={mappedTemplateCol}
-                      onChange={(e) => handleMappingChange(preset.label, e.target.value)}
-                      className="flex-1 p-1.5 border rounded text-sm"
-                    >
-                      <option value="">未映射</option>
-                      {selectedColumns.map(col => (
-                        <option key={col} value={col}>{col}</option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-            {presetColumns.filter(p => p.required).some(p =>
-              !Object.values(currentMapping).includes(p.label)
-            ) && (
-              <p className="text-sm text-amber-600 mt-3">
-                请确保所有必填预制列（项目名称、数量、单位）已映射
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </>
+      {/* 报价单展示列配置 */}
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-medium flex items-center justify-between">
+            <span>报价单所需展示与编辑列规范</span>
+            <span className="text-xs font-normal text-gray-400">已选中 {(settings.quotation_columns || []).length} / {PRESET_COLUMNS.length} 列</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500 mb-4">
+            当前项目下的所有报价单表格将动态渲染以下勾选的列（支持包含/不包含税及价格公式实时联动）：
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {PRESET_COLUMNS.map(col => {
+              const checked = (settings.quotation_columns || []).includes(col);
+              return (
+                <button
+                  key={col}
+                  type="button"
+                  onClick={() => toggleQuotationColumn(col)}
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    checked
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <span>{col}</span>
+                  {checked ? <CheckSquare className="h-4 w-4 text-emerald-600 ml-1.5" /> : <Square className="h-4 w-4 text-gray-300 ml-1.5" />}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

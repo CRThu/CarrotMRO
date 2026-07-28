@@ -51,14 +51,14 @@ function createAxiosConfig(config: SimpleLlmConfig): AxiosRequestConfig {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     },
-    timeout: 60000,
+    timeout: 45000, // 45 秒超时断线，防止错误端点无限卡死
   };
 
   if (config.proxy && config.proxy.trim() !== '') {
     const agent = new HttpsProxyAgent(config.proxy.trim());
     axiosConfig.httpAgent = agent;
     axiosConfig.httpsAgent = agent;
-    axiosConfig.proxy = false; // 禁用 axios 自带代理处理机制，由 HttpsProxyAgent 接管
+    axiosConfig.proxy = false;
   }
 
   return axiosConfig;
@@ -93,20 +93,24 @@ export function extractJsonFromText(text: string): any | null {
 }
 
 /**
- * 生成动态 OCR Prompt 引导 LLM 返回标准结构 JSON
+ * 生成动态 OCR Prompt 引导 LLM 返回标准结构 JSON，支持多页/多图无缝拼接提取
  */
-export function buildOcrPrompt(columns: string[]): string {
+export function buildOcrPrompt(columns: string[], imageCount: number = 1): string {
   const colList = columns.join('、');
-  return `你是一个专业的工程报价单OCR识别助手。
-你的任务是阅读并理解图片中的报价单内容，提取其中的项目信息。
+  const multiImageNote = imageCount > 1
+    ? `特别强调：用户本次上传了 ${imageCount} 张多页/多图报价单图片。请按照图片排列的先后顺序（第 1 张到第 ${imageCount} 张），顺次提取每一页表格中的数据项，并将所有页面的表格行合并为单一完整的 "items" 数组输出，切勿漏掉后几页的数据！\n`
+    : '';
 
-任务要求：
-1. 提取以下字段：${colList}。
-2. 不要对项目进行序号编号。
-3. 不要遗漏项目，也不要虚构项目。
-4. 将所有不确定或有疑问的内容汇总在备注字段中。
+  return `你是一个专业的工程与采购报价单 OCR 识别助手。
+你的任务是阅读并理解用户上传的报价单图片内容，精确提取其中的表格项目数据。
 
-请严格按照以下 JSON 格式返回结果，不要包含其他内容：
+${multiImageNote}任务要求：
+1. 提取每个表格项的以下字段：${colList}。
+2. 请按原始表格顺序依次提取，不要遗漏任何项目，也不要虚构项目。
+3. 如果某些字段在图中未明示，保留为空字符串 ""。
+4. 将所有不确定或有疑问的内容汇总在 "remarks" 备注字段中。
+
+请严格按照以下 JSON 格式返回结果，不要包含任何 markdown 说明之外的代码块：
 {
   "items": [
     { ${columns.map(col => `"${col}": ""`).join(', ')} }
@@ -116,9 +120,14 @@ export function buildOcrPrompt(columns: string[]): string {
 }
 
 /**
- * 多模型 OCR 图片识别方法
+ * 多模型 OCR 图片识别方法（单请求多图 + JSON 输出 + 自动容错降级 + 进度通知）
  */
-export async function runOcrWithLlm(images: ImageInput[], columns: string[], overrideConfig?: SimpleLlmConfig): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function runOcrWithLlm(
+  images: ImageInput[],
+  columns: string[],
+  overrideConfig?: SimpleLlmConfig,
+  onProgress?: (step: string) => void
+): Promise<{ success: boolean; data?: any; error?: string }> {
   const activeConfig = getActiveProviderConfig();
   const config: SimpleLlmConfig = overrideConfig || {
     apiKey: activeConfig.apiKey,
@@ -129,18 +138,22 @@ export async function runOcrWithLlm(images: ImageInput[], columns: string[], ove
   };
 
   if (!config.apiKey) {
-    return { success: false, error: '未配置 当前激活模型服务商的 API Key，请先前往“系统设置”填写对应的 API Key。' };
+    return { success: false, error: '未配置当前激活模型服务商的 API Key，请先前往“系统设置”填写 API Key。' };
   }
   if (!columns || columns.length === 0) {
     return { success: false, error: '未配置识别列，请先在项目中勾选识别列。' };
   }
 
   const baseUrl = resolveBaseUrl(config);
-  const prompt = buildOcrPrompt(columns);
+  const prompt = buildOcrPrompt(columns, images.length);
 
+  onProgress?.(`已构建 Prompt（共 ${images.length} 张图片），正在打包至单次 API 请求...`);
+
+  // 构建单次请求的多图 payload content 数组
   const contentItems: any[] = [{ type: 'text', text: prompt }];
 
-  for (const img of images) {
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
     const b64 = img.buffer.toString('base64');
     contentItems.push({
       type: 'image_url',
@@ -150,22 +163,46 @@ export async function runOcrWithLlm(images: ImageInput[], columns: string[], ove
     });
   }
 
-  const payload = {
-    model: config.model || 'gemini-3.6-flash',
-    messages: [
-      {
-        role: 'user',
-        content: contentItems,
-      },
-    ],
-    temperature: 0.1,
-  };
-
   const url = `${baseUrl}/chat/completions`;
   const axiosConfig = createAxiosConfig(config);
 
+  const providerName = config.provider || 'API';
+  const modelName = config.model || 'default';
+
+  onProgress?.(`正在发送请求至大模型 [${providerName} - ${modelName}]...`);
+
   try {
-    const response = await axios.post(url, payload, axiosConfig);
+    let response;
+    try {
+      // 尝试包含 response_format 的严格模式
+      response = await axios.post(
+        url,
+        {
+          model: modelName,
+          messages: [{ role: 'user', content: contentItems }],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        },
+        axiosConfig
+      );
+    } catch (firstErr: any) {
+      // 如果服务商/模型不支持 response_format，尝试回退降级模式
+      console.warn('含有 response_format 请求失败，尝试退回通用模式:', firstErr.message);
+      onProgress?.(`服务商 [${providerName}] 响应异常: ${firstErr.message}。正在尝试通用模式无约束重发...`);
+
+      response = await axios.post(
+        url,
+        {
+          model: modelName,
+          messages: [{ role: 'user', content: contentItems }],
+          temperature: 0.1,
+        },
+        axiosConfig
+      );
+    }
+
+    onProgress?.('大模型数据接收完毕，正在校验提取 JSON 结构...');
+
     const content = response.data?.choices?.[0]?.message?.content || '';
     const parsedData = extractJsonFromText(typeof content === 'string' ? content : JSON.stringify(content));
 
@@ -186,9 +223,9 @@ export async function runOcrWithLlm(images: ImageInput[], columns: string[], ove
 
     return { success: true, data: finalData };
   } catch (err: any) {
-    const errMsg = err.response?.data?.error?.message || err.message || String(err);
+    const errMsg = err.response?.data?.error?.message || err.response?.data?.detail || err.message || String(err);
     console.error('LLM OCR 识别失败:', errMsg);
-    return { success: false, error: `模型调用失败: ${errMsg}` };
+    return { success: false, error: `服务商 [${providerName}] 识别请求失败: ${errMsg}` };
   }
 }
 

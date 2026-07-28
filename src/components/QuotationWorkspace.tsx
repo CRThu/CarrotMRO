@@ -1,30 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MatchPopover } from '@/components/MatchPopover';
-import { RateCardTableData, QuotationItem, ColumnMapping, TableItem } from '@/types';
+import { OcrProgressModal } from '@/components/OcrProgressModal';
+import { QuotationItem } from '@/types';
 import * as api from '@/api';
-import { Save, Upload } from 'lucide-react';
+import { Save, Download, Plus, Trash2, Image, Loader2, Maximize2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Plus, Trash2 } from 'lucide-react';
 
 interface MatchCandidate {
   name: string;
   score: number;
   columns: string[];
   values: string[];
+  itemData?: Record<string, string>;
 }
 
 interface QuotationWorkspaceProps {
   currentProject: string;
   activeQuotationFilename: string;
   quotationItems: QuotationItem[];
-  ocrFiles: string[];
   projectRateCard: string | null;
-  ratecardTableData: RateCardTableData;
-  selectedColumns: string[];
-  quotationMapping: ColumnMapping;
+  projectTemplate: string | null;
+  quotationColumns: string[];
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (index: number) => void;
@@ -32,128 +31,192 @@ interface QuotationWorkspaceProps {
   onQuotationDataChange: (items: QuotationItem[]) => void;
 }
 
-const computeTotal = (item: Record<string, string>): string => {
-  const qty = parseFloat(item['数量'] ?? '');
-  const price = parseFloat(item['单价'] ?? '');
-  if (isNaN(qty) || isNaN(price)) return '';
-  return (qty * price).toFixed(2);
-};
+// 帮助函数：自动计算联动价格
+export function calculateRowFormulas(item: Record<string, string>, changedField?: string): Record<string, string> {
+  const updated = { ...item };
+  const qty = parseFloat(updated['数量'] ?? '');
+  const priceExcl = parseFloat(updated['不含税单价'] ?? '');
+  let taxRateStr = updated['税率'] ?? '';
+  let taxRate = parseFloat(taxRateStr);
+  if (taxRateStr.includes('%')) {
+    taxRate = parseFloat(taxRateStr.replace('%', '')) / 100;
+  } else if (taxRate > 1) {
+    taxRate = taxRate / 100;
+  }
 
-// 预制列标签到报价单字段名的映射
-const PRESET_LABEL_TO_QUOTATION_FIELD: Record<string, string> = {
-  '项目名称': '项目名称',
-  '数量': '数量',
-  '单位': '单位',
-  '单价': '单价',
-  '备注': '备注',
-};
+  // 1. 不含税总价
+  if (!isNaN(qty) && !isNaN(priceExcl)) {
+    updated['不含税总价'] = (qty * priceExcl).toFixed(2);
+  }
+
+  // 2. 税率存在时联动计算含税单价与含税总价
+  if (!isNaN(priceExcl) && !isNaN(taxRate)) {
+    const priceIncl = priceExcl * (1 + taxRate);
+    updated['含税单价'] = priceIncl.toFixed(2);
+    if (!isNaN(qty)) {
+      updated['含税总价'] = (qty * priceIncl).toFixed(2);
+    }
+  }
+
+  return updated;
+}
 
 export function QuotationWorkspace({
   currentProject,
   activeQuotationFilename,
   quotationItems,
-  ocrFiles,
   projectRateCard,
-  ratecardTableData,
-  selectedColumns: _selectedColumns,
-  quotationMapping,
+  projectTemplate,
+  quotationColumns,
   onEdit,
   onAddRow,
   onDeleteRow,
   onSave,
   onQuotationDataChange,
 }: QuotationWorkspaceProps) {
-  const [selectedOcrFile, setSelectedOcrFile] = useState<string>('');
-  const [importUnitPrice, setImportUnitPrice] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const ocrFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 独立 OCR 多图识别状态日志弹窗 state
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [ocrModalOpen, setOcrModalOpen] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<'processing' | 'done' | 'error'>('processing');
+  const [ocrImageCount, setOcrImageCount] = useState(0);
+  const [ocrCurrentStep, setOcrCurrentStep] = useState('');
+  const [ocrLogs, setOcrLogs] = useState<string[]>([]);
+  const [ocrErrorMessage, setOcrErrorMessage] = useState<string | undefined>(undefined);
+  const [ocrExtractedCount, setOcrExtractedCount] = useState(0);
+
   const [matchCandidatesMap, setMatchCandidatesMap] = useState<Record<number, MatchCandidate[]>>({});
   const [matchLoadingMap, setMatchLoadingMap] = useState<Record<number, boolean>>({});
 
-  useEffect(() => {
-    if (ocrFiles.length > 0 && !selectedOcrFile) {
-      setSelectedOcrFile(ocrFiles[0]);
-    }
-  }, [ocrFiles, selectedOcrFile]);
+  const columnsToShow = quotationColumns && quotationColumns.length > 0
+    ? quotationColumns
+    : ['项目组', '项目名称', '单位', '数量', '不含税单价', '不含税总价', '税率', '含税单价', '含税总价', '说明'];
 
-  const displayItems: Record<string, string>[] = quotationItems.map((item, i) => ({
-    ...item,
-    '序号': String(i + 1),
-    '合计': computeTotal(item),
-  }));
-
-  const handleImportFromOcr = async () => {
-    if (!selectedOcrFile) return;
-    setImporting(true);
+  // 手动取消/终止任务
+  const handleCancelTask = async () => {
+    if (!activeTaskId) return;
     try {
-      const res = await api.getOcrData(currentProject, selectedOcrFile);
-      const raw = res.data;
-      const fileData = raw.data || raw;
-      const ocrItems: TableItem[] = Array.isArray(fileData.items) ? fileData.items : [];
-
-      // 使用用户配置的报价单映射来转换 OCR 数据
-      // quotationMapping: { ocr列名 → 预制列标签 }
-      const newItems: QuotationItem[] = ocrItems.map((ocrItem: TableItem) => {
-        const mapped: QuotationItem = {
-          '项目名称': '',
-          '单位': '',
-          '数量': '',
-          '单价': '',
-          '备注': '',
-          _matchStatus: 'pending',
-          '清单名称': '',
-        };
-        for (const [ocrCol, ocrVal] of Object.entries(ocrItem)) {
-          const presetLabel = quotationMapping[ocrCol];
-          if (presetLabel) {
-            const field = PRESET_LABEL_TO_QUOTATION_FIELD[presetLabel];
-            if (field) mapped[field] = ocrVal || '';
-          }
-        }
-        if (!importUnitPrice) mapped['单价'] = '';
-        return mapped;
-      });
-
-      onQuotationDataChange(newItems);
-      setMatchCandidatesMap({});
-    } catch {
-      alert('导入 OCR 数据失败');
-    }
-    setImporting(false);
+      await api.cancelTask(activeTaskId);
+    } catch {}
+    setOcrStatus('error');
+    setOcrErrorMessage('已人工中止该识别任务。');
+    setOcrCurrentStep('任务已人工取消');
+    setActiveTaskId(null);
   };
 
+  // 图片 OCR 多图识别导入与弹出式状态窗口
+  const handleOcrFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const count = files.length;
+    setOcrImageCount(count);
+    setOcrStatus('processing');
+    setOcrLogs([`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 准备上传 ${count} 张图片...`]);
+    setOcrErrorMessage(undefined);
+    setOcrExtractedCount(0);
+    setOcrModalOpen(true);
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+
+    try {
+      const res = await api.uploadOcrFiles(currentProject, formData);
+      const taskId = res.data.task_id;
+      setActiveTaskId(taskId);
+
+      // 轮询任务状态
+      const timer = setInterval(async () => {
+        try {
+          const statusRes = await api.checkTaskStatus(taskId);
+          const task = statusRes.data;
+
+          if (task.progress) {
+            setOcrCurrentStep(task.progress);
+          }
+
+          if (Array.isArray(task.logs)) {
+            setOcrLogs(task.logs);
+          }
+
+          if (task.status === 'done') {
+            clearInterval(timer);
+            setOcrStatus('done');
+            setActiveTaskId(null);
+
+            const ocrItems: Record<string, string>[] = task.result?.items || task.result?.data || [];
+            setOcrExtractedCount(ocrItems.length);
+
+            if (ocrItems.length > 0) {
+              const newQuotationItems: QuotationItem[] = ocrItems.map(raw => {
+                const item: QuotationItem = { _matchStatus: 'pending' };
+                columnsToShow.forEach(col => {
+                  item[col] = raw[col] || '';
+                });
+                return calculateRowFormulas(item);
+              });
+              onQuotationDataChange([...quotationItems, ...newQuotationItems]);
+            }
+          } else if (task.status === 'error') {
+            clearInterval(timer);
+            setOcrStatus('error');
+            setActiveTaskId(null);
+            setOcrErrorMessage(task.message || '大模型识别过程产生错误。');
+          }
+        } catch (pollErr: any) {
+          if (pollErr.response?.status === 404) {
+            clearInterval(timer);
+            setOcrStatus('error');
+            setActiveTaskId(null);
+            setOcrErrorMessage('任务已取消或已被移除');
+          }
+        }
+      }, 1000);
+
+    } catch (err: any) {
+      setOcrStatus('error');
+      setActiveTaskId(null);
+      const errStr = err.response?.data?.detail || err.message || String(err);
+      setOcrErrorMessage(errStr);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  // Excel 导出
+  const handleExport = async () => {
+    try {
+      const res = await api.exportQuotation(currentProject, activeQuotationFilename);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${activeQuotationFilename.replace('.json', '')}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      alert('导出报价单失败，请检查是否已关联有效的 Excel 模板');
+    }
+  };
+
+  // 定价表比对 candidate 获取
   const fetchCandidatesForItem = async (itemIndex: number, itemName: string) => {
     if (!projectRateCard || !itemName) return;
     setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: true }));
     try {
       const searchRes = await api.matchRateCard(projectRateCard, [itemName], 5);
-      const matches: [string, number][] = searchRes.data[itemName] || [];
+      const matches: [string, number, Record<string, string>][] = searchRes.data[itemName] || [];
 
-      const rcColumns = ratecardTableData.columns || [];
-      const rcItems = ratecardTableData.items || [];
-
-      // 使用用户配置的定价表映射来确定 name 列
-      // 查找映射到"项目名称"的定价表列
-      let nameCol: string | null = null;
-      // 从 ratecardMapping 中查找（这里简化处理：查找 alias="name" 或第一列）
-      for (const col of rcColumns) {
-        if (col.alias === 'name') { nameCol = col.name; break; }
-      }
-      if (!nameCol && rcColumns.length > 0) {
-        nameCol = rcColumns[0].name;
-      }
-      if (!nameCol) { setMatchLoadingMap(prev => ({ ...prev, [itemIndex]: false })); return; }
-
-      const displayCols = rcColumns.filter((c: any) => c.name !== nameCol);
-      const colNames = displayCols.map((c: any) => c.name);
-
-      const candidates: MatchCandidate[] = matches
-        .map(([matchedName, score]) => {
-          const rcItem = rcItems.find((ri: any) => ri[nameCol!] === matchedName);
-          if (!rcItem) return null;
-          const values = displayCols.map((c: any) => String(rcItem[c.name] ?? ''));
-          return { name: matchedName, score, columns: colNames, values };
-        })
-        .filter(Boolean) as MatchCandidate[];
+      const candidates: MatchCandidate[] = matches.map(([matchedName, score, rcItem]) => ({
+        name: matchedName,
+        score,
+        columns: Object.keys(rcItem || {}),
+        values: Object.values(rcItem || {}).map(v => String(v ?? '')),
+        itemData: rcItem,
+      }));
 
       setMatchCandidatesMap(prev => ({ ...prev, [itemIndex]: candidates }));
     } catch {
@@ -164,193 +227,175 @@ export function QuotationWorkspace({
 
   const handleSelectCandidate = (itemIndex: number, candidate: MatchCandidate) => {
     const item = quotationItems[itemIndex];
-    // 用户手动选择匹配候选，不做自动检测
-    const newItems = [...quotationItems];
-    newItems[itemIndex] = {
+    const rcData = candidate.itemData || {};
+
+    const updatedItem: QuotationItem = {
       ...item,
       _matchStatus: 'matched' as const,
       '清单名称': candidate.name,
     };
-    onQuotationDataChange(newItems);
-  };
 
-  const handleMarkCustom = (itemIndex: number) => {
-    const item = quotationItems[itemIndex];
-    const newItem = {
-      ...item,
-      _matchStatus: 'custom' as const,
-      '清单名称': '',
-    };
+    if (rcData['不含税单价']) updatedItem['不含税单价'] = rcData['不含税单价'];
+    if (rcData['含税单价']) updatedItem['含税单价'] = rcData['含税单价'];
+    if (rcData['单位']) updatedItem['单位'] = rcData['单位'];
+    if (rcData['税率']) updatedItem['税率'] = rcData['税率'];
+
+    const finalItem = calculateRowFormulas(updatedItem);
     const newItems = [...quotationItems];
-    newItems[itemIndex] = newItem;
+    newItems[itemIndex] = finalItem;
     onQuotationDataChange(newItems);
   };
 
-  const hasRateCard = !!projectRateCard;
+  const handleCellChange = (index: number, col: string, val: string) => {
+    const current = quotationItems[index] || {};
+    const updated = { ...current, [col]: val };
+    const calculated = calculateRowFormulas(updated, col);
+    onEdit(index, col, calculated[col]);
+    Object.keys(calculated).forEach(k => {
+      if (k !== col && calculated[k] !== current[k]) {
+        onEdit(index, k, calculated[k]);
+      }
+    });
+  };
 
   return (
-    <>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-light text-gray-700">项目: {currentProject}</h1>
-        <Button onClick={onSave} variant="default" size="sm">
-          <Save className="h-4 w-4 mr-1" />
-          保存报价单
-        </Button>
+    <div className="space-y-4 relative">
+      {/* 顶部标题与操作栏 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-light text-gray-800">
+            {currentProject} / <span className="font-normal text-blue-600">{activeQuotationFilename}</span>
+          </h1>
+          <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
+            <span>关联定价单: <strong className="text-gray-700">{projectRateCard || '未关联'}</strong></span>
+            <span>关联模板: <strong className="text-gray-700">{projectTemplate || '未关联'}</strong></span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={ocrFileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleOcrFileSelect}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => ocrFileInputRef.current?.click()}
+            className="border-purple-300 text-purple-700 hover:bg-purple-50"
+          >
+            <Image className="h-4 w-4 mr-1.5" />
+            图片 OCR 识别导入
+          </Button>
+
+          {projectTemplate && (
+            <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700">
+              <Download className="h-4 w-4 mr-1.5" />
+              导出 Excel
+            </Button>
+          )}
+
+          <Button onClick={onSave} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+            <Save className="h-4 w-4 mr-1.5" />
+            保存报价单
+          </Button>
+        </div>
       </div>
 
-      <Card className="mb-4">
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">报价单:</span>
-              <span className="text-sm font-medium">{activeQuotationFilename}</span>
-            </div>
-
-            <div className="h-5 w-px bg-gray-200" />
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">清单:</span>
-              <span className="text-sm font-medium">{projectRateCard || '未关联'}</span>
-            </div>
-
-            <div className="h-5 w-px bg-gray-200" />
-
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">从OCR导入:</span>
-              <select
-                value={selectedOcrFile}
-                onChange={(e) => setSelectedOcrFile(e.target.value)}
-                className="border rounded px-2 py-1 text-sm"
-              >
-                {ocrFiles.map(f => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-              <label className="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={importUnitPrice}
-                  onChange={(e) => setImportUnitPrice(e.target.checked)}
-                  className="rounded"
-                />
-                同时导入单价
-              </label>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleImportFromOcr}
-                disabled={importing || !selectedOcrFile}
-              >
-                <Upload className="h-4 w-4 mr-1" />
-                {importing ? '导入中...' : '导入'}
-              </Button>
-            </div>
-
+      {/* 当用户点击“后台运行”收起窗口时，在右下角提供浮动挂起 Task 卡片，点击可随时重新唤醒 Modal 终端 */}
+      {!ocrModalOpen && ocrStatus === 'processing' && activeTaskId && (
+        <div className="fixed bottom-6 right-6 z-40 bg-slate-900 text-white p-3.5 px-4 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700 animate-bounce">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-400 shrink-0" />
+          <div className="text-xs">
+            <p className="font-semibold text-slate-200">AI 多图识别任务运行中 ({ocrImageCount} 张图)</p>
+            <p className="text-slate-400 truncate max-w-[200px] mt-0.5">{ocrCurrentStep}</p>
           </div>
-        </CardContent>
-      </Card>
+          <Button
+            size="xs"
+            variant="secondary"
+            onClick={() => setOcrModalOpen(true)}
+            className="bg-slate-700 hover:bg-slate-600 text-white text-xs ml-2"
+          >
+            <Maximize2 className="h-3 w-3 mr-1" /> 唤醒终端
+          </Button>
+        </div>
+      )}
 
-      <Card>
-        <CardContent className="pt-4">
+      {/* 报价单数据表格 */}
+      <Card className="shadow-sm">
+        <CardContent className="pt-4 overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">匹配</TableHead>
-                <TableHead className="w-8">序号</TableHead>
-                <TableHead>项目名称</TableHead>
-                <TableHead>清单名称</TableHead>
-                <TableHead>单位</TableHead>
-                <TableHead>数量</TableHead>
-                <TableHead>单价</TableHead>
-                <TableHead>合计</TableHead>
-                <TableHead>备注</TableHead>
-                <TableHead className="w-20"></TableHead>
+              <TableRow className="bg-gray-50/80">
+                <TableHead className="w-12 text-center">匹配</TableHead>
+                <TableHead className="w-10">#</TableHead>
+                {columnsToShow.map(col => (
+                  <TableHead key={col} className="font-medium text-gray-700 whitespace-nowrap">
+                    {col}
+                  </TableHead>
+                ))}
+                <TableHead className="w-16"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayItems.map((item, i) => {
-                const qItem = quotationItems[i];
-                const matchStatus = qItem?._matchStatus || 'pending';
+              {quotationItems.map((item, i) => {
+                const matchStatus = item?._matchStatus || 'pending';
                 return (
-                  <TableRow key={i}>
-                    <TableCell>
-                      {hasRateCard ? (
+                  <TableRow key={i} className="hover:bg-gray-50/50">
+                    <TableCell className="text-center">
+                      {projectRateCard ? (
                         <MatchPopover
                           status={matchStatus}
-                          itemName={qItem?.['项目名称'] || ''}
-                          baseName={qItem?.['清单名称'] || ''}
+                          itemName={item?.['项目名称'] || ''}
+                          baseName={item?.['清单名称'] || ''}
                           candidates={matchCandidatesMap[i] || []}
                           loading={matchLoadingMap[i]}
-                          onOpen={() => fetchCandidatesForItem(i, qItem?.['项目名称'] || '')}
+                          onOpen={() => fetchCandidatesForItem(i, item?.['项目名称'] || '')}
                           onClose={() => setMatchCandidatesMap(prev => { const next = { ...prev }; delete next[i]; return next; })}
                           onSelect={(c) => handleSelectCandidate(i, c)}
-                          onMarkCustom={() => handleMarkCustom(i)}
+                          onMarkCustom={() => {
+                            const newItems = [...quotationItems];
+                            newItems[i] = { ...item, _matchStatus: 'custom' };
+                            onQuotationDataChange(newItems);
+                          }}
                         />
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-gray-400">{item['序号']}</TableCell>
-                    <TableCell>
-                      <Input
-                        value={item['项目名称'] ?? ''}
-                        onChange={(e) => onEdit(i, '项目名称', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-gray-600 truncate block max-w-[120px]" title={item['清单名称'] || ''}>
-                        {item['清单名称'] || <span className="text-gray-300">-</span>}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={item['单位'] ?? ''}
-                        onChange={(e) => onEdit(i, '单位', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={item['数量'] ?? ''}
-                        onChange={(e) => onEdit(i, '数量', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={item['单价'] ?? ''}
-                        onChange={(e) => onEdit(i, '单价', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell className="text-sm font-medium text-gray-700">{item['合计'] || '-'}</TableCell>
-                    <TableCell>
-                      <Input
-                        value={item['备注'] ?? ''}
-                        onChange={(e) => onEdit(i, '备注', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <div className="flex items-center gap-0.5">
-                        {onAddRow && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onAddRow(i)}
-                            className="h-7 w-7 text-gray-400 hover:text-green-600"
-                            title="在下方插入行"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {onDeleteRow && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onDeleteRow(i)}
-                            className="h-7 w-7 text-gray-400 hover:text-red-500"
-                            title="删除此行"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
+                    <TableCell className="text-xs text-gray-400 font-mono">{i + 1}</TableCell>
+                    {columnsToShow.map(col => (
+                      <TableCell key={col} className="p-1.5 min-w-[100px]">
+                        <Input
+                          value={item[col] ?? ''}
+                          onChange={(e) => handleCellChange(i, col, e.target.value)}
+                          className="h-8 text-sm focus-visible:ring-1"
+                        />
+                      </TableCell>
+                    ))}
+                    <TableCell className="whitespace-nowrap p-1.5">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onAddRow(i)}
+                          className="h-7 w-7 text-gray-400 hover:text-green-600"
+                          title="插入下一行"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => onDeleteRow(i)}
+                          className="h-7 w-7 text-gray-400 hover:text-red-500"
+                          title="删除当前行"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -358,19 +403,37 @@ export function QuotationWorkspace({
               })}
             </TableBody>
           </Table>
-          {onAddRow && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAddRow()}
-              className="mt-3 text-gray-500"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              末尾新增行
-            </Button>
+
+          {quotationItems.length === 0 && (
+            <div className="text-center py-10 text-gray-400 text-sm">
+              报价单暂无数据，点击上方“图片 OCR 识别导入”（支持同时勾选多张图）或下方“新增行”开始填写
+            </div>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onAddRow()}
+            className="mt-4 text-gray-600 border-dashed"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            新增数据行
+          </Button>
         </CardContent>
       </Card>
-    </>
+
+      {/* 独立 OCR 流式日志与步骤进度大尺寸终端窗口 */}
+      <OcrProgressModal
+        isOpen={ocrModalOpen}
+        status={ocrStatus}
+        imageCount={ocrImageCount}
+        currentStep={ocrCurrentStep}
+        logs={ocrLogs}
+        errorMessage={ocrErrorMessage}
+        itemCount={ocrExtractedCount}
+        onClose={() => setOcrModalOpen(false)}
+        onCancel={handleCancelTask}
+      />
+    </div>
   );
 }

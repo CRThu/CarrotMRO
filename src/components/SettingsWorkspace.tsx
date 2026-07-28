@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { AppSettings, LlmConfig, ProviderConfig } from '@/types';
 import * as api from '@/api';
-import { Key, Server, Cpu, Globe, Network, Save, CheckCircle2, AlertCircle, Eye, EyeOff, Radio } from 'lucide-react';
+import {
+  Key, Server, Cpu, Globe, Network, Save,
+  CheckCircle2, AlertCircle, Eye, EyeOff, Radio, Activity, ShieldCheck,
+} from 'lucide-react';
 
+// 各服务商预设配置（含快捷推荐模型药丸列表）
 const PROVIDER_OPTIONS = [
   {
     id: 'google',
@@ -43,6 +47,7 @@ const DEFAULT_PROVIDERS: Record<string, ProviderConfig> = {
 
 export function SettingsWorkspace() {
   const [activeGroup, setActiveGroup] = useState<'api'>('api');
+  // 当前正在编辑的服务商 tab（独立于"激活"的服务商）
   const [activeTabProvider, setActiveTabProvider] = useState<string>('google');
 
   const [llmConfig, setLlmConfig] = useState<LlmConfig>({
@@ -66,23 +71,22 @@ export function SettingsWorkspace() {
       const res = await api.getSettings();
       if (res.data?.llm) {
         const raw = res.data.llm;
+        const active = raw.activeProvider || 'google';
         setLlmConfig({
-          activeProvider: raw.activeProvider || 'google',
+          activeProvider: active,
           providers: {
             ...JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)),
             ...(raw.providers || {}),
           },
         });
-        setActiveTabProvider(raw.activeProvider || 'google');
+        setActiveTabProvider(active);
       }
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: '加载设置失败: ' + (err.message || String(err)) });
     } finally {
-
       setLoading(false);
     }
   };
-
 
   // 当前正在编辑的 Provider 配置
   const currentProviderConfig: ProviderConfig = llmConfig.providers?.[activeTabProvider] || {
@@ -92,6 +96,7 @@ export function SettingsWorkspace() {
     proxy: '',
   };
 
+  // 更新当前编辑 Provider 的某一字段
   const updateCurrentProviderField = (field: keyof ProviderConfig, value: string) => {
     setLlmConfig(prev => ({
       ...prev,
@@ -112,7 +117,8 @@ export function SettingsWorkspace() {
       const payload: AppSettings = { llm: llmConfig };
       const res = await api.updateSettings(payload);
       if (res.data?.success) {
-        setStatusMessage({ type: 'success', text: '配置已成功保存！多服务商 API Key 已成功独立持久化至 data/settings.json。' });
+        const activeName = PROVIDER_OPTIONS.find(p => p.id === llmConfig.activeProvider)?.name || llmConfig.activeProvider;
+        setStatusMessage({ type: 'success', text: `配置已成功保存！当前激活服务商: [${activeName}]，多 Key 参数已持久化。` });
       } else {
         setStatusMessage({ type: 'error', text: '保存失败: ' + (res.data?.detail || '未知错误') });
       }
@@ -152,14 +158,14 @@ export function SettingsWorkspace() {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden min-h-[600px] flex flex-col md:flex-row">
       {/* 左侧设置分组导览 */}
-      <div className="w-full md:w-64 bg-slate-50 border-r border-gray-200 p-6 flex flex-col gap-2">
-        <h2 className="text-xl font-medium text-slate-800 mb-4 flex items-center gap-2">
+      <div className="w-full md:w-56 bg-slate-50 border-r border-gray-200 p-5 flex flex-col gap-2 shrink-0">
+        <h2 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Server className="w-5 h-5 text-indigo-600" />
           系统设置
         </h2>
         <button
           onClick={() => setActiveGroup('api')}
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left ${
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
             activeGroup === 'api'
               ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -179,10 +185,11 @@ export function SettingsWorkspace() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">LLM 多模型 API 接入配置（支持多 Key 独立持久化）</h3>
               <p className="text-sm text-gray-500 mt-1">
-                支持为 Google Gemini、DeepSeek、Xiaomi MiMo 及 Custom 模式独立配置与持久化对应的 API Key、Model 和接口参数。
+                为每个服务商独立配置 API Key 与模型参数；点击卡片即自动激活该服务商。
               </p>
             </div>
 
+            {/* 状态提示 */}
             {statusMessage && (
               <div
                 className={`p-4 rounded-md flex items-start gap-3 text-sm ${
@@ -200,33 +207,37 @@ export function SettingsWorkspace() {
               </div>
             )}
 
-            {/* 服务商 Tab 切换与生效配置 */}
+            {/* 服务商 Tab 切换卡片 */}
             <div className="space-y-4 bg-slate-50 p-6 rounded-xl border border-slate-200">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1.5">
                   <Globe className="w-4 h-4 text-indigo-500" />
-                  选择配置服务商
+                  选择并激活服务商（点击即生效）
                 </label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {PROVIDER_OPTIONS.map(opt => {
-                    const isActiveTarget = llmConfig.activeProvider === opt.id;
-                    const isTabSelected = activeTabProvider === opt.id;
+                    const isActive = llmConfig.activeProvider === opt.id;
                     return (
                       <button
                         key={opt.id}
                         type="button"
-                        onClick={() => setActiveTabProvider(opt.id)}
+                        // 点选即同时切换编辑 tab 并自动激活为系统生效服务商
+                        onClick={() => {
+                          setActiveTabProvider(opt.id);
+                          setLlmConfig(prev => ({ ...prev, activeProvider: opt.id }));
+                        }}
                         className={`p-3 rounded-lg border text-left flex flex-col justify-between transition-all ${
-                          isTabSelected
-                            ? 'bg-white border-indigo-600 shadow-sm ring-1 ring-indigo-600'
+                          isActive
+                            ? 'bg-white border-indigo-600 shadow-sm ring-2 ring-indigo-600/30'
                             : 'bg-slate-100 border-gray-200 hover:bg-white text-gray-700'
                         }`}
                       >
                         <div className="font-medium text-xs flex items-center justify-between">
                           <span>{opt.name}</span>
-                          {isActiveTarget && (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                              生效中
+                          {isActive && (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                              <Radio className="w-2.5 h-2.5 animate-pulse" />
+                              当前激活
                             </span>
                           )}
                         </div>
@@ -239,22 +250,14 @@ export function SettingsWorkspace() {
                 </div>
               </div>
 
-              {/* 设为当前系统默认生效的服务商 */}
+              {/* 当前激活服务商状态提示 */}
               <div className="flex items-center justify-between bg-indigo-50 p-3 rounded-lg border border-indigo-100">
                 <span className="text-xs text-indigo-900 font-medium">
-                  当前编辑: <span className="font-bold">{activeProviderObj?.name}</span>
-                  {llmConfig.activeProvider === activeTabProvider ? ' (正在作为系统实际生效服务商)' : ''}
+                  当前已激活服务商: <span className="font-bold text-indigo-700">{PROVIDER_OPTIONS.find(p => p.id === llmConfig.activeProvider)?.name}</span>
                 </span>
-                {llmConfig.activeProvider !== activeTabProvider && (
-                  <button
-                    type="button"
-                    onClick={() => setLlmConfig({ ...llmConfig, activeProvider: activeTabProvider })}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded font-medium transition-colors flex items-center gap-1 shadow-xs"
-                  >
-                    <Radio className="w-3.5 h-3.5" />
-                    设为默认生效服务商
-                  </button>
-                )}
+                <span className="text-[11px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-semibold">
+                  系统默认实时生效
+                </span>
               </div>
 
               {/* API Key */}
@@ -281,7 +284,7 @@ export function SettingsWorkspace() {
                 </div>
               </div>
 
-              {/* Model 名称 */}
+              {/* Model 名称 + 快捷推荐模型药丸 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                   <Cpu className="w-4 h-4 text-indigo-500" />
@@ -303,10 +306,10 @@ export function SettingsWorkspace() {
                         key={m}
                         type="button"
                         onClick={() => updateCurrentProviderField('model', m)}
-                        className={`text-xs px-2 py-1 rounded transition-colors ${
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                           currentProviderConfig.model === m
-                            ? 'bg-indigo-600 text-white font-medium'
-                            : 'bg-white border border-gray-300 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600'
+                            ? 'bg-indigo-600 text-white font-medium border-indigo-600'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300'
                         }`}
                       >
                         {m}
@@ -320,40 +323,40 @@ export function SettingsWorkspace() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                   <Globe className="w-4 h-4 text-indigo-500" />
-                  Base URL (接口基础地址)
+                  Base URL（接口基础地址）
                 </label>
                 <input
                   type="text"
                   value={currentProviderConfig.baseUrl || ''}
                   onChange={e => updateCurrentProviderField('baseUrl', e.target.value)}
                   placeholder={`默认: ${activeProviderObj?.defaultUrl || '自定义端点 URL'}`}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm font-mono"
                 />
               </div>
 
-              {/* Optional Proxy */}
+              {/* Proxy（可选） */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
-                  <Network className="w-4 h-4 text-indigo-500" />
-                  Proxy 网络代理 (可选)
+                  <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                  HTTP/HTTPS 代理（可选）
                 </label>
                 <input
                   type="text"
                   value={currentProviderConfig.proxy || ''}
                   onChange={e => updateCurrentProviderField('proxy', e.target.value)}
                   placeholder="如 http://127.0.0.1:7890，无代理请留空"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm font-mono"
                 />
               </div>
             </div>
 
             {/* 操作按钮区 */}
-            <div className="flex items-center gap-4 pt-2">
+            <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium shadow-sm transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-medium shadow-sm transition-colors disabled:opacity-50 text-sm"
               >
                 <Save className="w-4 h-4" />
                 {saving ? '保存中...' : '保存所有配置'}
@@ -363,8 +366,9 @@ export function SettingsWorkspace() {
                 type="button"
                 onClick={handleTestConnection}
                 disabled={testing || !currentProviderConfig.apiKey}
-                className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium border border-slate-300 transition-colors disabled:opacity-50 text-sm"
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md font-medium transition-colors disabled:opacity-50 text-sm shadow-sm"
               >
+                <Activity className="w-4 h-4 text-indigo-600" />
                 {testing ? '测试中...' : `测试 ${activeProviderObj?.name} 连接`}
               </button>
             </div>

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock functions must be defined inside vi.mock factory
 const mockGet = vi.fn()
 const mockPost = vi.fn()
 const mockPut = vi.fn()
@@ -26,53 +25,71 @@ describe('API', () => {
 
   describe('Preset Columns', () => {
     it('getPresetColumns calls GET /api/preset-columns', async () => {
-      mockGet.mockResolvedValue({ data: { columns: [] } })
+      mockGet.mockResolvedValue({ data: ['项目组', '项目名称'] })
       await api.getPresetColumns()
       expect(mockGet).toHaveBeenCalledWith('/api/preset-columns')
     })
   })
 
-  describe('Projects', () => {
+  describe('Projects and Settings', () => {
     it('getProjects calls GET /api/projects', async () => {
-      mockGet.mockResolvedValue({ data: { projects: [] } })
+      mockGet.mockResolvedValue({ data: ['proj1'] })
       await api.getProjects()
       expect(mockGet).toHaveBeenCalledWith('/api/projects')
     })
 
     it('createProject calls POST /api/projects/{name}', async () => {
-      mockPost.mockResolvedValue({ data: { message: 'ok' } })
+      mockPost.mockResolvedValue({ data: { success: true, name: 'test-project' } })
       await api.createProject('test-project')
       expect(mockPost).toHaveBeenCalledWith('/api/projects/test-project')
     })
-  })
 
-  describe('Templates', () => {
-    it('getTemplates calls GET /api/templates', async () => {
-      mockGet.mockResolvedValue({ data: { files: [] } })
-      await api.getTemplates()
-      expect(mockGet).toHaveBeenCalledWith('/api/templates')
+    it('getProjectInfo calls GET /api/projects/{name}', async () => {
+      mockGet.mockResolvedValue({ data: { name: 'test-project', ocr_columns: [] } })
+      await api.getProjectInfo('test-project')
+      expect(mockGet).toHaveBeenCalledWith('/api/projects/test-project')
+    })
+
+    it('updateProjectSettings calls PATCH /api/projects/{name}/settings', async () => {
+      mockPatch.mockResolvedValue({ data: { success: true } })
+      await api.updateProjectSettings('test-project', { ratecard_name: 'rc1' })
+      expect(mockPatch).toHaveBeenCalledWith('/api/projects/test-project/settings', { ratecard_name: 'rc1' })
     })
   })
 
   describe('RateCards', () => {
     it('getRateCards calls GET /api/ratecards', async () => {
-      mockGet.mockResolvedValue({ data: { ratecards: [] } })
+      mockGet.mockResolvedValue({ data: ['rc1'] })
       await api.getRateCards()
       expect(mockGet).toHaveBeenCalledWith('/api/ratecards')
     })
-  })
 
-  describe('Project Columns', () => {
-    it('getProjectColumns calls GET /api/projects/{name}/columns', async () => {
-      mockGet.mockResolvedValue({ data: { available_columns: [], selected_columns: [], column_mappings: {} } })
-      await api.getProjectColumns('test-project')
-      expect(mockGet).toHaveBeenCalledWith('/api/projects/test-project/columns')
+    it('previewRateCardImport calls POST /api/ratecards/{name}/import-preview', async () => {
+      mockPost.mockResolvedValue({ data: { headers: ['名称'], sampleRows: [] } })
+      const formData = new FormData()
+      await api.previewRateCardImport('rc1', formData)
+      expect(mockPost).toHaveBeenCalledWith('/api/ratecards/rc1/import-preview', formData)
     })
 
-    it('updateProjectColumns calls PATCH /api/projects/{name}/columns', async () => {
-      mockPatch.mockResolvedValue({ data: { message: 'ok' } })
-      await api.updateProjectColumns('test-project', { columns: ['col1'] })
-      expect(mockPatch).toHaveBeenCalledWith('/api/projects/test-project/columns', { columns: ['col1'] })
+    it('importRateCardFile calls POST /api/ratecards/{name}/import', async () => {
+      mockPost.mockResolvedValue({ data: { success: true, count: 10 } })
+      const payload = { headers: ['名称'], items: [], mapping: { 名称: '项目名称' } }
+      await api.importRateCardFile('rc1', payload)
+      expect(mockPost).toHaveBeenCalledWith('/api/ratecards/rc1/import', payload)
+    })
+  })
+
+  describe('System Settings and LLM aliases', () => {
+    it('updateSettings calls PUT /api/settings', async () => {
+      mockPut.mockResolvedValue({ data: { success: true } })
+      await api.updateSettings({ llm: {} })
+      expect(mockPut).toHaveBeenCalledWith('/api/settings', { llm: {} })
+    })
+
+    it('testLlmConfig calls POST /api/settings/test-llm', async () => {
+      mockPost.mockResolvedValue({ data: { success: true } })
+      await api.testLlmConfig({ apiKey: '123' })
+      expect(mockPost).toHaveBeenCalledWith('/api/settings/test-llm', { apiKey: '123' })
     })
   })
 })

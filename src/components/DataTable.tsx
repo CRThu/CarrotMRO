@@ -1,30 +1,31 @@
-import { RateCardColumn, TableItem } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus } from 'lucide-react';
 
+export type ColumnDef = string | { name: string; computed?: boolean; cellRenderer?: string; options?: string[] };
+
 interface DataTableProps {
-  columns: RateCardColumn[];
-  items: TableItem[];
+  columns: ColumnDef[];
+  items: Record<string, string>[];
   onEdit?: (index: number, field: string, value: string) => void;
   onAddRow?: (index?: number) => void;
   onDeleteRow?: (index: number) => void;
 }
 
-const renderCell = (item: TableItem, col: RateCardColumn, index: number, onEdit?: DataTableProps['onEdit']) => {
-  const key = col.name;
-  const value = item[key] ?? '';
+const renderCell = (item: Record<string, string>, col: ColumnDef, index: number, onEdit?: DataTableProps['onEdit']) => {
+  const colName = typeof col === 'string' ? col : col.name;
+  const value = item[colName] ?? '';
 
-  if (col.computed) {
+  if (typeof col !== 'string' && col.computed) {
     return <span className="text-sm font-medium text-gray-700">{value || '-'}</span>;
   }
 
-  if (col.cellRenderer === 'select' && col.options) {
+  if (typeof col !== 'string' && col.cellRenderer === 'select' && col.options) {
     return onEdit ? (
       <select
         value={value}
-        onChange={(e) => onEdit(index, key, e.target.value)}
+        onChange={(e) => onEdit(index, colName, e.target.value)}
         className="w-full p-1 border rounded text-sm"
       >
         <option value="">-</option>
@@ -40,7 +41,7 @@ const renderCell = (item: TableItem, col: RateCardColumn, index: number, onEdit?
   return onEdit ? (
     <Input
       value={value}
-      onChange={(e) => onEdit(index, key, e.target.value)}
+      onChange={(e) => onEdit(index, colName, e.target.value)}
     />
   ) : (
     <span>{value}</span>
@@ -55,20 +56,24 @@ export const DataTable = ({ columns, items, onEdit, onAddRow, onDeleteRow }: Dat
       <Table>
         <TableHeader>
           <TableRow>
-            {columns.map((col) => (
-              <TableHead key={col.name}>{col.name}</TableHead>
-            ))}
+            {columns.map((col) => {
+              const colName = typeof col === 'string' ? col : col.name;
+              return <TableHead key={colName}>{colName}</TableHead>;
+            })}
             {hasRowActions && <TableHead className="w-20"></TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.map((item, i) => (
             <TableRow key={i}>
-              {columns.map((col) => (
-                <TableCell key={col.name}>
-                  {renderCell(item, col, i, onEdit)}
-                </TableCell>
-              ))}
+              {columns.map((col) => {
+                const colName = typeof col === 'string' ? col : col.name;
+                return (
+                  <TableCell key={colName}>
+                    {renderCell(item, col, i, onEdit)}
+                  </TableCell>
+                );
+              })}
               {hasRowActions && (
                 <TableCell className="whitespace-nowrap">
                   <div className="flex items-center gap-0.5">

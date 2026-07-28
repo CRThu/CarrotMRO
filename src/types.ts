@@ -1,27 +1,27 @@
-export type CellRenderer = 'input' | 'select';
+// 系统全局 10 项标准预制列
+export const PRESET_COLUMNS = [
+  '项目组',
+  '项目名称',
+  '单位',
+  '数量',
+  '不含税单价',
+  '不含税总价',
+  '税率',
+  '含税单价',
+  '含税总价',
+  '说明',
+] as const;
 
-export type RateCardColumn = {
+export type PresetColumnName = (typeof PRESET_COLUMNS)[number];
+
+export interface ProjectSettings {
   name: string;
-  strict: boolean;
-  alias: string | null;
-  cellRenderer?: CellRenderer;
-  options?: string[];
-  computed?: boolean;
-};
-
-export type PresetColumn = {
-  key: string;
-  label: string;
-  required: boolean;
-  type: string;
-  computed?: boolean;
-};
-
-export type ColumnMapping = Record<string, string>; // template_col → preset_label
-
-export type MappingScope = 'ocr' | 'ratecard' | 'quotation';
-
-export type ColumnMappings = Record<MappingScope, ColumnMapping>;
+  created_at: string;
+  ratecard_name: string | null;
+  template_name: string | null;
+  ocr_columns: string[];
+  quotation_columns: string[];
+}
 
 export type TableItem = Record<string, string>;
 
@@ -30,14 +30,8 @@ export type QuotationItem = TableItem & {
   '清单名称'?: string;
 };
 
-export type OcrTableData = {
-  columns: RateCardColumn[];
-  items: TableItem[];
-  remarks: string;
-};
-
 export type RateCardTableData = {
-  columns: RateCardColumn[];
+  columns: string[];
   items: TableItem[];
 };
 
@@ -56,5 +50,3 @@ export interface LlmConfig {
 export interface AppSettings {
   llm: LlmConfig;
 }
-
-

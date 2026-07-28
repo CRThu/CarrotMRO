@@ -19,7 +19,7 @@ describe('LLM Service Tools', () => {
   it('应该能够正确构建多字段动态 Prompt', () => {
     const columns = ['物料名称', '数量', '综合单价'];
     const prompt = buildOcrPrompt(columns);
-    expect(prompt).toContain('提取以下字段：物料名称、数量、综合单价');
+    expect(prompt).toContain('物料名称、数量、综合单价');
     expect(prompt).toContain('"物料名称": ""');
     expect(prompt).toContain('"数量": ""');
     expect(prompt).toContain('"综合单价": ""');

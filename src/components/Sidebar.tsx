@@ -1,32 +1,25 @@
-import { SidebarSection, TreeItem, Folder, FolderOpen, ScanLine, FileText, Receipt } from '@/components/SidebarTree';
-import { Settings } from 'lucide-react';
+import { SidebarSection, TreeItem, Folder, FolderOpen, FileText, Receipt } from '@/components/SidebarTree';
+import { Settings, Sliders } from 'lucide-react';
 
 interface SidebarProps {
   projects: string[];
   rateCards: string[];
-  ocrFiles: string[];
   quotationFiles: string[];
   currentProject: string | null;
   currentRateCard: string | null;
-  currentView: 'project' | 'ratecard' | 'settings' | null;
-  activeFilename: string | null;
+  currentView: 'project_config' | 'quotation' | 'ratecard' | 'settings' | null;
   activeQuotationFilename: string | null;
   expandedSections: Set<string>;
   expandedProject: string | null;
-  expandedOcr: string | null;
   expandedQuotation: string | null;
   onToggleSection: (section: string) => void;
-  onSelectProject: (name: string) => void;
+  onSelectProjectConfig: (name: string) => void;
   onSelectRateCard: (name: string) => void;
   onSelectSettings: () => void;
   onCreateProject: (name: string) => Promise<void>;
   onCreateRateCard: (name: string) => Promise<void>;
   onToggleProject: (name: string) => void;
-  onToggleOcr: (name: string) => void;
   onToggleQuotation: (name: string) => void;
-  onOcrSelectFile: (filename: string) => void;
-  onOcrDeleteFile: (filename: string) => Promise<void>;
-  onOcrUpload: (files: FileList) => void;
   onQuotationSelectFile: (filename: string) => void;
   onQuotationDeleteFile: (filename: string) => Promise<void>;
   onQuotationCreate: () => Promise<void>;
@@ -35,108 +28,93 @@ interface SidebarProps {
 export function Sidebar({
   projects = [],
   rateCards = [],
-  ocrFiles = [],
   quotationFiles = [],
   currentProject,
   currentRateCard,
   currentView,
-  activeFilename,
   activeQuotationFilename,
   expandedSections,
   expandedProject,
-  expandedOcr,
   expandedQuotation,
   onToggleSection,
-  onSelectProject,
+  onSelectProjectConfig,
   onSelectRateCard,
   onSelectSettings,
   onCreateProject,
   onCreateRateCard,
   onToggleProject,
-  onToggleOcr,
   onToggleQuotation,
-  onOcrSelectFile,
-  onOcrDeleteFile,
-  onOcrUpload,
   onQuotationSelectFile,
   onQuotationDeleteFile,
   onQuotationCreate,
 }: SidebarProps) {
-
   return (
-    <aside className="w-72 p-6 bg-slate-800 text-white flex flex-col overflow-y-auto">
-      <h2 className="text-2xl font-light mb-8">CarrotMRO</h2>
+    <aside className="w-72 p-6 bg-slate-800 text-white flex flex-col overflow-y-auto shrink-0 select-none">
+      <div className="flex items-center gap-2 mb-8">
+        <h2 className="text-2xl font-light tracking-wide text-blue-400">CarrotMRO</h2>
+      </div>
 
       <SidebarSection
-        title="项目"
+        title="项目列表"
         icon={expandedSections.has('projects') ? <FolderOpen size={14} /> : <Folder size={14} />}
         expanded={expandedSections.has('projects')}
         onToggle={() => onToggleSection('projects')}
         onCreate={onCreateProject}
         createPlaceholder="新项目名称..."
       >
-        {projects.map(p => (
-          <TreeItem
-            key={p}
-            label={p}
-            active={currentProject === p && currentView === 'project' && !activeFilename && !activeQuotationFilename}
-            expandable
-            expanded={expandedProject === p}
-            onToggleExpand={() => onToggleProject(p)}
-            onClick={() => onSelectProject(p)}
-            onSettings={() => onSelectProject(p)}
-          >
+        {projects.map(p => {
+          const isProjectExpanded = expandedProject === p;
+          const isCurrentProject = currentProject === p;
+
+          return (
             <TreeItem
-              label="OCR"
-              icon={<ScanLine size={14} />}
-              active={currentProject === p && currentView === 'project' && activeFilename !== null}
+              key={p}
+              label={p}
+              active={isCurrentProject && currentView === 'project_config'}
               expandable
-              expanded={expandedOcr === p}
-              onToggleExpand={() => onToggleOcr(p)}
-              onUpload={onOcrUpload}
+              expanded={isProjectExpanded}
+              onToggleExpand={() => onToggleProject(p)}
+              onClick={() => onSelectProjectConfig(p)}
             >
-              {ocrFiles.map(f => (
-                <TreeItem
-                  key={f}
-                  label={f}
-                  icon={<FileText size={14} />}
-                  active={activeFilename === f}
-                  onClick={() => onOcrSelectFile(f)}
-                  onDelete={() => onOcrDeleteFile(f)}
-                />
-              ))}
+              <TreeItem
+                label="项目设置"
+                icon={<Sliders size={14} />}
+                active={isCurrentProject && currentView === 'project_config'}
+                onClick={() => onSelectProjectConfig(p)}
+              />
+
+              <TreeItem
+                label="报价单列表"
+                icon={<Receipt size={14} />}
+                active={isCurrentProject && currentView === 'quotation'}
+                expandable
+                expanded={expandedQuotation === p}
+                onToggleExpand={() => onToggleQuotation(p)}
+                onCreate={onQuotationCreate}
+              >
+                {quotationFiles.map(f => (
+                  <TreeItem
+                    key={f}
+                    label={f}
+                    icon={<FileText size={14} />}
+                    active={isCurrentProject && currentView === 'quotation' && activeQuotationFilename === f}
+                    onClick={() => onQuotationSelectFile(f)}
+                    onDelete={() => onQuotationDeleteFile(f)}
+                  />
+                ))}
+              </TreeItem>
             </TreeItem>
-            <TreeItem
-              label="报价"
-              icon={<Receipt size={14} />}
-              active={currentProject === p && currentView === 'project' && activeQuotationFilename !== null}
-              expandable
-              expanded={expandedQuotation === p}
-              onToggleExpand={() => onToggleQuotation(p)}
-              onCreate={onQuotationCreate}
-            >
-              {quotationFiles.map(f => (
-                <TreeItem
-                  key={f}
-                  label={f}
-                  icon={<FileText size={14} />}
-                  active={activeQuotationFilename === f}
-                  onClick={() => onQuotationSelectFile(f)}
-                  onDelete={() => onQuotationDeleteFile(f)}
-                />
-              ))}
-            </TreeItem>
-          </TreeItem>
-        ))}
+          );
+        })}
       </SidebarSection>
 
       <SidebarSection
-        title="协议基准价格清单"
+        title="协议定价表"
         icon={expandedSections.has('ratecards') ? <FolderOpen size={14} /> : <Folder size={14} />}
         expanded={expandedSections.has('ratecards')}
         onToggle={() => onToggleSection('ratecards')}
         onCreate={onCreateRateCard}
-        createPlaceholder="新清单名称..."
+        createPlaceholder="新定价表名称..."
       >
         {rateCards.map(rc => (
           <TreeItem
@@ -151,17 +129,16 @@ export function Sidebar({
       <div className="mt-auto pt-6 border-t border-slate-700">
         <button
           onClick={onSelectSettings}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
             currentView === 'settings'
-              ? 'bg-indigo-600 text-white font-medium'
+              ? 'bg-blue-600 text-white font-medium shadow'
               : 'text-slate-300 hover:bg-slate-700 hover:text-white'
           }`}
         >
           <Settings size={16} />
-          系统设置
+          系统 LLM 设置
         </button>
       </div>
     </aside>
   );
 }
-
