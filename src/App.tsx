@@ -6,6 +6,7 @@ import { ProjectWorkspace } from '@/components/ProjectWorkspace';
 import { ProjectConfigWorkspace } from '@/components/ProjectConfigWorkspace';
 import { RateCardWorkspace } from '@/components/RateCardWorkspace';
 import { QuotationWorkspace } from '@/components/QuotationWorkspace';
+import { SettingsWorkspace } from '@/components/SettingsWorkspace';
 import { TaskNotification } from '@/components/TaskNotification';
 
 function App() {
@@ -23,7 +24,8 @@ function App() {
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const [expandedOcr, setExpandedOcr] = useState<string | null>(null);
   const [expandedQuotation, setExpandedQuotation] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'project' | 'ratecard' | null>(null);
+  const [currentView, setCurrentView] = useState<'project' | 'ratecard' | 'settings' | null>(null);
+
   const [ratecardTableData, setRatecardTableData] = useState<RateCardTableData>({ columns: [], items: [] });
   const [ratecardImporting, setRatecardImporting] = useState(false);
   const [quotationData, setQuotationData] = useState<{ columns: RateCardColumn[]; items: QuotationItem[] }>({ columns: [], items: [] });
@@ -422,6 +424,7 @@ function App() {
         onToggleSection={handleToggleSection}
         onSelectProject={handleSelectProject}
         onSelectRateCard={(name) => { setCurrentRateCard(name); setCurrentProject(null); setCurrentView('ratecard'); }}
+        onSelectSettings={() => { setCurrentProject(null); setCurrentRateCard(null); setCurrentView('settings'); }}
         onCreateProject={async (name) => { await api.createProject(name); fetchProjects(); }}
         onCreateRateCard={async (name) => { await api.createRateCard(name); fetchRateCards(); }}
         onToggleProject={handleToggleProject}
@@ -436,7 +439,12 @@ function App() {
       />
 
       <main className="flex-1 p-10 bg-gray-100 overflow-y-auto">
+        {currentView === 'settings' && (
+          <SettingsWorkspace />
+        )}
+
         {currentView === 'project' && currentProject && activeQuotationFilename && (
+
           <QuotationWorkspace
             currentProject={currentProject}
             activeQuotationFilename={activeQuotationFilename}

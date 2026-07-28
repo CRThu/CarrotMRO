@@ -58,3 +58,9 @@ export const importQuotation = (projectName: string, formData: FormData) =>
 // ===== 定价表匹配 =====
 export const matchRateCard = (ratecardName: string, queries: string[], limit?: number) =>
   axios.post('/api/match', { ratecard_name: ratecardName, queries, limit: limit ?? 1 });
+
+// ===== 系统设置相关 =====
+export const getSettings = () => axios.get('/api/settings');
+export const updateSettings = (settings: any) => axios.put('/api/settings', settings);
+export const testLlmConfig = (config: any) => axios.post('/api/settings/test-llm', config);
+

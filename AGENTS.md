@@ -37,6 +37,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   │       ├── ProjectConfigWorkspace.tsx # 项目配置工作区（关联定价表、列映射）
 │   │       ├── RateCardWorkspace.tsx # 定价表工作区
 │   │       ├── QuotationWorkspace.tsx # 报价单工作区（含匹配功能）
+│   │       ├── SettingsWorkspace.tsx  # 系统设置工作区（多模型接入与独立 Key 配置）
 │   │       ├── MatchPopover.tsx    # 匹配候选选择弹窗（点击图标选择清单名称）
 │   │       ├── TaskNotification.tsx # 通用异步任务通知（浮动提示）
 │   │       ├── ErrorBoundary.tsx   # 错误边界（显示完整堆栈信息）
@@ -45,7 +46,9 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 ├── data/               # 本地 JSON 数据与 Excel 模板存储
 │   ├── projects/       # 项目数据及 OCR 结果 JSON
 │   ├── ratecard/       # 协议定价表 JSON 文件
-│   └── template/       # 报价单 Excel 模板（*.xlsx）
+│   ├── template/       # 报价单 Excel 模板（*.xlsx）
+│   └── settings.json   # 多服务商系统设置与 API Key 存储 JSON
+
 ├── .env.example        # 环境变量模板
 └── package.json        # 项目依赖与 Bun 命令集中配置文件
 ```
@@ -218,7 +221,22 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
 | `export_quotation(template_content, groups)` | 将数据填充到模板，生成 Excel 文件 |
 | `import_quotation(template_content, excel_content)` | 从 Excel 文件中提取报价单数据，按模板结构分组返回 |
 
+### 5. 系统设置与多模型 LLM 接入
+
+- **功能**: 管理大模型 API 接入配置，支持 Google Gemini、DeepSeek、Xiaomi MiMo 及 Custom 自定义代理端点。每个服务商独立持久化各自的 API Key、Model 名称、Base URL 及 Proxy 代理。
+- **存储**: `data/settings.json`（服务启动时自动从磁盘加载恢复，含 `activeProvider` 与各厂商独立配置）。
+- **协议规范**: 统一采用 OpenAI Chat Completions 兼容 API 格式封装，零依赖运行。
+
+#### 设置 API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/settings` | 获取系统设置（包含多 Provider 独立 Key 配置） |
+| `PUT` | `/api/settings` | 更新并持久化系统设置至 `data/settings.json` |
+| `POST` | `/api/settings/test-llm` | 测试当前模型服务商 API Key 与连通性 |
+
 ## 数据流向
+
 
 ```
 [项目模块]

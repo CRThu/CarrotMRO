@@ -40,3 +40,21 @@ export type RateCardTableData = {
   columns: RateCardColumn[];
   items: TableItem[];
 };
+
+export interface ProviderConfig {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+  proxy?: string;
+}
+
+export interface LlmConfig {
+  activeProvider: string;
+  providers: Record<string, ProviderConfig>;
+}
+
+export interface AppSettings {
+  llm: LlmConfig;
+}
+
+

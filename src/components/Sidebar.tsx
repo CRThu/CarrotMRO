@@ -1,4 +1,5 @@
 import { SidebarSection, TreeItem, Folder, FolderOpen, ScanLine, FileText, Receipt } from '@/components/SidebarTree';
+import { Settings } from 'lucide-react';
 
 interface SidebarProps {
   projects: string[];
@@ -7,7 +8,7 @@ interface SidebarProps {
   quotationFiles: string[];
   currentProject: string | null;
   currentRateCard: string | null;
-  currentView: 'project' | 'ratecard' | null;
+  currentView: 'project' | 'ratecard' | 'settings' | null;
   activeFilename: string | null;
   activeQuotationFilename: string | null;
   expandedSections: Set<string>;
@@ -17,6 +18,7 @@ interface SidebarProps {
   onToggleSection: (section: string) => void;
   onSelectProject: (name: string) => void;
   onSelectRateCard: (name: string) => void;
+  onSelectSettings: () => void;
   onCreateProject: (name: string) => Promise<void>;
   onCreateRateCard: (name: string) => Promise<void>;
   onToggleProject: (name: string) => void;
@@ -47,6 +49,7 @@ export function Sidebar({
   onToggleSection,
   onSelectProject,
   onSelectRateCard,
+  onSelectSettings,
   onCreateProject,
   onCreateRateCard,
   onToggleProject,
@@ -59,6 +62,7 @@ export function Sidebar({
   onQuotationDeleteFile,
   onQuotationCreate,
 }: SidebarProps) {
+
   return (
     <aside className="w-72 p-6 bg-slate-800 text-white flex flex-col overflow-y-auto">
       <h2 className="text-2xl font-light mb-8">CarrotMRO</h2>
@@ -143,6 +147,21 @@ export function Sidebar({
           />
         ))}
       </SidebarSection>
+
+      <div className="mt-auto pt-6 border-t border-slate-700">
+        <button
+          onClick={onSelectSettings}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors ${
+            currentView === 'settings'
+              ? 'bg-indigo-600 text-white font-medium'
+              : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+          }`}
+        >
+          <Settings size={16} />
+          系统设置
+        </button>
+      </div>
     </aside>
   );
 }
+

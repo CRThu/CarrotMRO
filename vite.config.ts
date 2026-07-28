@@ -18,5 +18,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist/client',
-  }
+  },
+  test: {
+    environment: 'happy-dom',
+    setupFiles: ['./src/test/setup.ts'],
+    globals: true,
+    include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts'],
+  },
 })
+
