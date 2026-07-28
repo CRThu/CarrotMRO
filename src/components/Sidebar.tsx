@@ -31,10 +31,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  projects,
-  rateCards,
-  ocrFiles,
-  quotationFiles,
+  projects = [],
+  rateCards = [],
+  ocrFiles = [],
+  quotationFiles = [],
   currentProject,
   currentRateCard,
   currentView,

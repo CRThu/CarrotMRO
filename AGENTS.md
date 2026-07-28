@@ -4,30 +4,31 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 
 ## 系统架构
 
-本系统采用前后端分离架构：
-- **后端 (Backend)**: 基于 FastAPI 构建，提供核心 API 接口，负责 OCR 处理、项目管理、定价表管理、数据存储及 Excel 生成。
-- **前端 (Frontend)**: 基于 React 构建，提供用户界面。采用树形侧边栏导航 + 右侧工作区布局，包含项目工作台、报价单编辑器和定价表查看器三个独立视图。
+本系统采用全栈 TypeScript 架构，支持单文件 `.exe` 发布与桌面/网页双模式运行：
+- **后端 (Server)**: 基于 Node.js / Express 构建，运行于桌面主进程，提供 RESTful API 接口，数据管理采用本地纯 JSON 文件文件存储 (`data/`)。
+- **前端 (Frontend)**: 基于 React 19 + Vite 6 + Tailwind CSS v4 构建，采用树形侧边栏导航 + 右侧工作区布局。
+- **运行/桌面壳**: 支持 **Bun Compile 超高速单文件打包** (`bun run package:exe`) 或 **Electron 原生 GUI 桌面应用模式** (`bun run dev:electron`)，端口 3000 天然开放供系统浏览器随时访问。
 
 ## 目录结构
 
 ```text
 .
-├── backend/            # 后端 FastAPI 应用
-│   ├── main.py         # 核心 API 路由与服务入口
-│   ├── config.py       # 配置管理（环境变量、目录路径）
-│   ├── photo_ocr.py    # OCR 识别逻辑封装（litellm + Xiaomi MiMo）
-│   ├── preset_columns.py # 全局预制列定义
-│   ├── match.py        # 模糊搜索工具（match_names）
-│   ├── ratecard_parser.py # 定价表 Excel/CSV 解析器（含 extract_names）
-│   ├── quotation_template.py # 报价单 Excel 模板解析与导出
-│   ├── pyproject.toml  # Python 依赖配置
-│   ├── uv.lock         # 依赖锁文件
-│   └── tests/          # 后端单元测试（pytest）
-├── frontend/           # 前端 React + Vite 应用
-│   ├── src/
-│   │   ├── App.tsx             # 应用入口，state 管理与布局路由
-│   │   ├── api.ts              # API 接口封装
-│   │   ├── types.ts            # TypeScript 类型定义
+├── src/                # 前端 React 19 应用
+│   ├── App.tsx         # 应用入口，State 管理与工作区路由
+│   ├── api.ts          # RESTful API 请求工具封装
+│   ├── types.ts        # TypeScript 全局数据模型定义
+│   └── components/     # UI 视图组件 (Sidebar, Workspaces 等)
+├── server/             # 后端 Node.js API 服务
+│   └── index.ts        # Express RESTful API 占位/功能路由
+├── electron/           # Electron 桌面应用壳
+│   └── main.ts         # 原生 GUI 桌面窗口主进程
+├── legacy/             # 归档的旧版代码 (供算法与逻辑参考)
+│   ├── backend/        # 原 Python FastAPI 后端
+│   └── frontend/       # 原 React 前端
+├── data/               # 本地 JSON 数据存储目录
+├── package.json        # 项目依赖与 Bun/Node 统一脚本
+└── tsconfig.json       # TypeScript 全局编译配置
+```
 │   │   ├── test/               # 前端测试配置
 │   │   └── components/
 │   │       ├── Sidebar.tsx         # 侧边栏导航组件
@@ -41,17 +42,12 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 │   │       ├── ErrorBoundary.tsx   # 错误边界（显示完整堆栈信息）
 │   │       ├── DataTable.tsx       # 通用数据表格组件
 │   │       └── ui/                 # shadcn/ui 基础组件
-│   ├── vitest.config.js  # Vitest 测试配置
-│   └── vite.config.js  # Vite 配置（含 /api 代理）
-├── e2e/                # 端到端测试（Playwright）
-├── data/               # 数据存储目录（自动定位，可通过 .env 覆盖）
-│   ├── projects/       # 项目数据及 OCR 结果存储
-│   ├── ratecard/       # 协议定价表 JSON 文件（*.json）
+├── data/               # 本地 JSON 数据与 Excel 模板存储
+│   ├── projects/       # 项目数据及 OCR 结果 JSON
+│   ├── ratecard/       # 协议定价表 JSON 文件
 │   └── template/       # 报价单 Excel 模板（*.xlsx）
 ├── .env.example        # 环境变量模板
-├── dev.bat             # 开发环境启动（FastAPI + Vite 并行）
-├── run.bat             # 生产环境启动（仅 FastAPI）
-└── build.bat           # 前端构建 → backend/static/
+└── package.json        # 项目依赖与 Bun 命令集中配置文件
 ```
 
 ## 核心功能
@@ -255,20 +251,12 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
 - **预制列映射**: 每个项目支持三个独立的映射（ocr、ratecard、quotation），存储在 `project.json` 的 `column_mappings` 字段中。
 
 ## 运行与开发指南
-1.  **环境管理**:
-    - **后端**: 本项目使用 `uv` 进行依赖管理与环境同步，请确保已安装 `uv`。
-    - **前端**: 本项目使用 `bun` 进行依赖管理与脚本运行，请确保已安装 `bun`。
-2.  **环境准备**:
-    - **后端**: 确保已安装 Python 环境及所需的依赖库（请查阅 `pyproject.toml`）。
-    - **前端**: 确保已进入 `frontend/` 目录，执行 `bun install` 安装依赖。
-3.  **启动**:
-    - **开发模式**: 双击 `dev.bat`，自动并行启动 FastAPI（端口 8000，热重载）和 Vite（端口 5173，代理 `/api`）。
-    - **生产模式**: 双击 `run.bat` 启动 FastAPI（端口 8000），前端需先 `build.bat` 构建。
-    - **仅构建前端**: 双击 `build.bat`，将 React 构建产物复制到 `backend/static/`。
-4.  **测试**:
-    - **后端单元测试**: `cd backend && uv run pytest -v`
-    - **前端单元测试**: `cd frontend && bunx vitest run`
-    - **端到端测试**: `cd e2e && npx playwright test`
+1. **环境准备**:
+   - **包管理与运行时**: 本项目统一使用 `bun` 或 `node` 进行依赖管理与脚本运行。
+2. **启动命令**:
+   - **开发模式**: 执行 `bun run dev`，自动并行启动后端监视服务与前端 Vite 开发服务（端口 5173，自动代理 `/api`）。
+   - **全栈构建**: 执行 `bun run build`，编译前端产物至 `dist/client/` 并编译后端 TS 至 `dist/server/`。
+   - **生产预览与 CLI 运行**: 执行 `bun run start`（或通过 `npx carrotmro` 全局启动），自动在当前目录生成/读取 `./data` 目录并调起默认浏览器。
 
 ## 文档维护规范
 为了确保文档始终反映系统实际状态，遵循以下原则：
@@ -286,14 +274,14 @@ items 中的 key 为纯字段名（不带 `item.` 前缀），导出时自动映
 - 使用中文交流和回复。
 
 ### 技术栈
-- **Python 包管理**: uv
-- **Python 数据处理**: polars（优先于 pandas）
-- **Python Web 框架**: FastAPI
-- **前端框架**: React
-- **CSS**: Tailwind CSS
+- **全栈语言**: TypeScript / Node.js (兼容 Bun 运行时)
+- **后端框架**: Express (运行于 Node.js 客户端/CLI)
+- **前端框架**: React 19
+- **前端构建与热重载**: Vite 6
+- **CSS 样式**: Tailwind CSS v4
 - **UI 组件库**: shadcn/ui（base-nova 风格，@base-ui/react 原语）
-- **前端包管理/运行**: bun
-- **前端构建**: Vite
+- **包管理工具**: Bun / npm
+- **CLI 命令支持**: 支持发布为 npm 包与 `npx carrotmro` 全局命令行工具运行
 
 ### 前端架构原则
 - **组件抽象化防耦合**: 侧边栏、导航等可复用 UI 区域必须抽离为独立组件，避免 App.tsx 堆积过多职责。App.tsx 只负责 state 管理和顶层布局路由，具体 UI 由子组件承载。

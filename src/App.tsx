@@ -42,15 +42,15 @@ function App() {
     return cols.map(c => typeof c === 'string' ? { name: c, strict: false, alias: null } : c);
   };
 
-  const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(res.data.projects); } catch (err) { console.error(err); } };
-  const fetchRateCards = async () => { try { const res = await api.getRateCards(); setRateCards(res.data.ratecards); } catch (err) { console.error(err); } };
-  const fetchTemplates = async () => { try { const res = await api.getTemplates(); setTemplates(res.data.files); } catch (err) { console.error(err); } };
-  const fetchOcrFiles = async (projectName: string) => { try { const res = await api.getOcrFiles(projectName); setOcrFiles(res.data.files); } catch (err) { console.error(err); } };
-  const fetchQuotationFiles = async (projectName: string) => { try { const res = await api.getQuotations(projectName); setQuotationFiles(res.data.files); } catch (err) { console.error(err); } };
+  const fetchProjects = async () => { try { const res = await api.getProjects(); setProjects(Array.isArray(res.data) ? res.data : (res.data?.projects || [])); } catch (err) { console.error(err); } };
+  const fetchRateCards = async () => { try { const res = await api.getRateCards(); setRateCards(Array.isArray(res.data) ? res.data : (res.data?.ratecards || [])); } catch (err) { console.error(err); } };
+  const fetchTemplates = async () => { try { const res = await api.getTemplates(); setTemplates(Array.isArray(res.data) ? res.data : (res.data?.files || [])); } catch (err) { console.error(err); } };
+  const fetchOcrFiles = async (projectName: string) => { try { const res = await api.getOcrFiles(projectName); setOcrFiles(Array.isArray(res.data) ? res.data : (res.data?.files || [])); } catch (err) { console.error(err); } };
+  const fetchQuotationFiles = async (projectName: string) => { try { const res = await api.getQuotations(projectName); setQuotationFiles(Array.isArray(res.data) ? res.data : (res.data?.files || [])); } catch (err) { console.error(err); } };
 
   useEffect(() => { fetchProjects(); fetchRateCards(); fetchTemplates(); fetchPresetColumns(); }, []);
 
-  const fetchPresetColumns = async () => { try { const res = await api.getPresetColumns(); setPresetColumns(res.data.columns || []); } catch (err) { console.error(err); } };
+  const fetchPresetColumns = async () => { try { const res = await api.getPresetColumns(); setPresetColumns(Array.isArray(res.data) ? res.data : (res.data?.columns || [])); } catch (err) { console.error(err); } };
 
   useEffect(() => {
     if (currentProject) {
