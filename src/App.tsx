@@ -29,6 +29,7 @@ function App() {
   });
 
   const [quotationItems, setQuotationItems] = useState<QuotationItem[]>([]);
+  const [quotationRemarks, setQuotationRemarks] = useState<string[]>([]);
   const [ratecardTableData, setRatecardTableData] = useState<RateCardTableData>({ columns: [], items: [] });
 
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['projects', 'ratecards']));
@@ -128,7 +129,12 @@ function App() {
     try {
       const res = await api.getQuotationData(currentProject, filename);
       const items: QuotationItem[] = Array.isArray(res.data.items) ? res.data.items : [];
+      const remarks: string[] = Array.isArray(res.data.remarks)
+        ? res.data.remarks
+        : (res.data.remarks ? [String(res.data.remarks)] : []);
+
       setQuotationItems(items);
+      setQuotationRemarks(remarks);
       setActiveQuotationFilename(filename);
       setCurrentRateCard(null);
       setCurrentView('quotation');
@@ -313,6 +319,7 @@ function App() {
             currentProject={currentProject}
             activeQuotationFilename={activeQuotationFilename}
             quotationItems={quotationItems}
+            quotationRemarks={quotationRemarks}
             projectRateCard={projectSettings.ratecard_name}
             projectTemplate={projectSettings.template_name}
             quotationColumns={projectSettings.quotation_columns}
@@ -321,6 +328,7 @@ function App() {
             onDeleteRow={handleQuotationDeleteRow}
             onSave={handleQuotationSave}
             onQuotationDataChange={setQuotationItems}
+            onQuotationRemarksChange={setQuotationRemarks}
           />
         )}
 

@@ -51,14 +51,23 @@ function createAxiosConfig(config: SimpleLlmConfig): AxiosRequestConfig {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
     },
-    timeout: 45000, // 45 秒超时断线，防止错误端点无限卡死
   };
 
   if (config.proxy && config.proxy.trim() !== '') {
-    const agent = new HttpsProxyAgent(config.proxy.trim());
-    axiosConfig.httpAgent = agent;
-    axiosConfig.httpsAgent = agent;
-    axiosConfig.proxy = false;
+    let rawProxy = config.proxy.trim();
+    // 自动补全协议前缀，兼容用户输入的 127.0.0.1:7890 纯 IP 端口格式
+    if (!rawProxy.startsWith('http://') && !rawProxy.startsWith('https://') && !rawProxy.startsWith('socks://')) {
+      rawProxy = `http://${rawProxy}`;
+    }
+
+    try {
+      const agent = new HttpsProxyAgent(rawProxy);
+      axiosConfig.httpAgent = agent;
+      axiosConfig.httpsAgent = agent;
+      axiosConfig.proxy = false; // 禁用 Axios 自带 proxy 避免与 HttpsProxyAgent 发生冲突
+    } catch (proxyErr) {
+      console.warn('HttpsProxyAgent 代理设置失败:', proxyErr);
+    }
   }
 
   return axiosConfig;
@@ -102,20 +111,25 @@ export function buildOcrPrompt(columns: string[], imageCount: number = 1): strin
     : '';
 
   return `你是一个专业的工程与采购报价单 OCR 识别助手。
-你的任务是阅读并理解用户上传的报价单图片内容，精确提取其中的表格项目数据。
+你的任务是阅读并理解用户上传的报价单图片（包含打印件或手写装修/维保报价单），精确提取其中的表格项目数据。
 
-${multiImageNote}任务要求：
-1. 提取每个表格项的以下字段：${colList}。
-2. 请按原始表格顺序依次提取，不要遗漏任何项目，也不要虚构项目。
-3. 如果某些字段在图中未明示，保留为空字符串 ""。
-4. 将所有不确定或有疑问的内容汇总在 "remarks" 备注字段中。
+${multiImageNote}【提取要求与规范】：
+1. 字段提取：提取每个表格项的以下字段：${colList}。
+2. 过滤序号：请自动去除“项目名称”内的前缀序号（例如将手写“1. 铺贴墙砖”提取为“铺贴墙砖”，切勿保留前缀“1.”或“一、”）。
+3. 涂改与遗漏：请仔细辨认手写体字迹。若单据上有划线涂改废弃的项目请忽略；不要遗漏任何有效项目，也不要虚构项目。
+4. 数值剥离：数量与单价尽量提取为纯数字或小数，单位提取为简短单位（例如将手写“15平米”剥离为数量 "15"、单位 "平米"）。
+5. 缺失留空：若某些字段在图中未明示，保留为空字符串 ""。
+6. 疑问汇总：将所有字迹模糊、缺失字段或无法确定的多条内容，逐条整理输出在 "remarks" 字符串数组列表中！
 
-请严格按照以下 JSON 格式返回结果，不要包含任何 markdown 说明之外的代码块：
+请严格按照以下标准 JSON 格式返回结果，不要包含任何 markdown 说明之外的代码块：
 {
   "items": [
     { ${columns.map(col => `"${col}": ""`).join(', ')} }
   ],
-  "remarks": ""
+  "remarks": [
+    "识别提示或疑问列表项 1",
+    "识别提示或疑问列表项 2"
+  ]
 }`;
 }
 
@@ -164,54 +178,34 @@ export async function runOcrWithLlm(
   const providerName = config.provider || 'API';
   const modelName = config.model || 'default';
 
-  // 自动重试控制参数
-  const maxRetries = 3;
+  const maxRetries = 5;
   let lastError = '';
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const retryPrefix = attempt > 1 ? `[自动重试 ${attempt}/${maxRetries}] ` : '';
-    onProgress?.(`${retryPrefix}正在发送请求至 [${providerName} - ${modelName}]...`);
+    onProgress?.(`${retryPrefix}正在连接 API 服务商 [${providerName} - ${modelName}] (${baseUrl})...`);
 
     const startTime = Date.now();
     try {
-      // 1. 尝试开启 response_format 强制 JSON 模式 + stream 流式
-      let response;
-      let isStreamSupported = true;
+      // 发送原生支持 response_format: { type: "json_object" } 的流式请求
+      // 配置建连/握手超时为 15 秒，避免代理握手失败时卡死无限挂起
+      const response = await axios.post(
+        url,
+        {
+          model: modelName,
+          messages: [{ role: 'user', content: contentItems }],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+          stream: true,
+        },
+        {
+          ...axiosConfig,
+          timeout: 15000, // 15 秒未建立 HTTP 握手连接立刻抛错进入下一次重试
+          responseType: 'stream',
+        }
+      );
 
-      try {
-        response = await axios.post(
-          url,
-          {
-            model: modelName,
-            messages: [{ role: 'user', content: contentItems }],
-            response_format: { type: 'json_object' }, // 协议级别标准 JSON 模式约束
-            temperature: 0.1,
-            stream: true,
-          },
-          {
-            ...axiosConfig,
-            responseType: 'stream',
-          }
-        );
-      } catch (streamErr: any) {
-        // 部分中转服务商不支持 response_format 或 stream，尝试降级
-        console.warn('含有 response_format 的流式请求未获支持，降级尝试无约束流式:', streamErr.message);
-        isStreamSupported = false;
-
-        response = await axios.post(
-          url,
-          {
-            model: modelName,
-            messages: [{ role: 'user', content: contentItems }],
-            temperature: 0.1,
-            stream: true,
-          },
-          {
-            ...axiosConfig,
-            responseType: 'stream',
-          }
-        );
-      }
+      onProgress?.(`${retryPrefix}已连接 API 端点，建立流打字传输通道...`);
 
       let fullText = '';
       let lastLogTime = Date.now();
@@ -220,7 +214,24 @@ export async function runOcrWithLlm(
         const stream = response.data;
         let buffer = '';
 
+        // 智能流活动超时器：首包必须在 30 秒内产生；之后只要模型持续打字输出，每次新字符都会重置倒计时！
+        let inactivityTimer: any = null;
+
+        const resetInactivityTimer = (isFirst = false) => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => {
+            stream.destroy();
+            const timeType = isFirst ? '首包响应超时（30秒未收到首个字）' : '传输中断超时（30秒内无新字符输出）';
+            reject(new Error(timeType));
+          }, 30000);
+        };
+
+        // 启动首包等待倒计时 30秒
+        resetInactivityTimer(true);
+
         stream.on('data', (chunk: Buffer) => {
+          resetInactivityTimer(false); // 每次收到打字字符，立刻重置 30秒倒计时！打字不断流绝不中断！
+
           buffer += chunk.toString('utf-8');
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
@@ -239,7 +250,7 @@ export async function runOcrWithLlm(
                   // 实时回调原始文本，供前端真实流打字渲染
                   onProgress?.('', textChunk);
 
-                  if (now - lastLogTime > 400) {
+                  if (now - lastLogTime > 800) {
                     lastLogTime = now;
                     const elapsedSec = ((now - startTime) / 1000).toFixed(1);
                     onProgress?.(`${retryPrefix}AI 实时提取中 (${elapsedSec}s) › 已输出 ${fullText.length} 字符`);
@@ -250,8 +261,15 @@ export async function runOcrWithLlm(
           }
         });
 
-        stream.on('end', () => resolve());
-        stream.on('error', (err: any) => reject(err));
+        stream.on('end', () => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          resolve();
+        });
+
+        stream.on('error', (err: any) => {
+          if (inactivityTimer) clearTimeout(inactivityTimer);
+          reject(err);
+        });
       });
 
       const parsedData = extractJsonFromText(fullText);
@@ -263,10 +281,18 @@ export async function runOcrWithLlm(
       if (!finalData.items) {
         finalData = {
           items: Array.isArray(parsedData) ? parsedData : [parsedData],
-          remarks: '',
+          remarks: [],
         };
       }
-      if (!finalData.remarks) finalData.remarks = '';
+
+      // 归一化 remarks 为 string[]
+      if (typeof finalData.remarks === 'string') {
+        finalData.remarks = finalData.remarks.trim()
+          ? finalData.remarks.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+      } else if (!Array.isArray(finalData.remarks)) {
+        finalData.remarks = [];
+      }
 
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
       onProgress?.(`数据提取成功 (总耗时 ${elapsedSec}s)`);
@@ -277,8 +303,9 @@ export async function runOcrWithLlm(
       console.warn(`OCR 识别第 ${attempt} 次尝试失败:`, lastError);
 
       if (attempt < maxRetries) {
-        onProgress?.(`[自动重试 ${attempt}/${maxRetries}] 遇到响应抖动: ${lastError}，等待 1 秒后自动重试...`);
-        await new Promise(r => setTimeout(r, 1000));
+        const delaySec = attempt + 1; // 递增退避：2s, 3s, 4s, 5s... 给网络充分恢复时间
+        onProgress?.(`[自动重试 ${attempt}/${maxRetries}] 遇到网络抖动: ${lastError}，等待 ${delaySec} 秒后重置重试...`);
+        await new Promise(r => setTimeout(r, delaySec * 1000));
       }
     }
   }

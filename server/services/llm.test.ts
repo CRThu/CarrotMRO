@@ -29,6 +29,8 @@ describe('LLM Service Tools & OCR Engine', () => {
     const prompt = buildOcrPrompt(columns, 2);
     expect(prompt).toContain('物料名称、数量、综合单价');
     expect(prompt).toContain('上传了 2 张多页/多图报价单图片');
+    expect(prompt).toContain('过滤序号');
+    expect(prompt).toContain('数值剥离');
     expect(prompt).toContain('"物料名称": ""');
   });
 
@@ -79,7 +81,9 @@ describe('LLM Service Tools & OCR Engine', () => {
     expect(requestPayload.messages[0].content[1].image_url.url).toContain('data:image/png;base64,');
 
     expect(result.success).toBe(true);
-    expect(result.data.items[0]['项目名称']).toBe('铜线');
+    expect(result.data?.items?.length).toBe(1);
+    expect(result.data?.items[0]['项目名称']).toBe('铜线');
+    expect(Array.isArray(result.data?.remarks)).toBe(true);
     expect(progressLogs.length).toBeGreaterThan(0);
   });
 
@@ -107,7 +111,7 @@ describe('LLM Service Tools & OCR Engine', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Incorrect API key provided');
-  }, 15000);
+  }, 25000);
 
   it('当大模型输出非法 JSON 格式文本时，正确返回解析失败提示', async () => {
     (axios.post as any).mockImplementation(() => {
@@ -125,5 +129,5 @@ describe('LLM Service Tools & OCR Engine', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('无法从模型返回提取有效 JSON');
-  });
+  }, 25000);
 });

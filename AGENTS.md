@@ -73,7 +73,10 @@ export const PRESET_COLUMNS = [
   }
   ```
 - **报价单创建**: 支持在项目下创建多个报价单 (`quotation-1.json`, `quotation-2.json` ...)。
-- **图片 OCR 识别导入**: 沉淀为报价单内部的核心导入功能。在报价单编辑页面直接上传图片，调用大模型按照项目配置的 `ocr_columns` 提取数据，并自动填充到当前报价单。
+- **图片 OCR 识别导入**: 沉淀为报价单内部的核心导入功能。在报价单编辑页面直接上传图片，调用大模型按照项目配置的 `ocr_columns` 提取数据，并自动填充到当前报价单。后端支持 `stream: true` 真实打字流控制台推送、协议层 `response_format: { type: "json_object" }` 强制 JSON Mode 约束与 3 次指数退避自动重试机制。
+- **自动保存机制**:
+  - 系统/服务商配置：选择服务商卡片即选即存，参数编辑防抖保存。
+  - 报价单编辑：OCR 生成完成自动立即持久化写盘，单元格/行列变动 1.2 秒防抖自动保存，顶部提供实时保存状态栏（`✓ 已自动保存` / `⏱️ 正在保存...`）。
 - **公式自动联动**: 报价单编辑时自动执行公式联动：
   - `不含税总价` = `数量` × `不含税单价`
   - `含税单价` = `不含税单价` × (1 + `税率`)
@@ -86,7 +89,7 @@ export const PRESET_COLUMNS = [
   | `POST` | `/api/projects/{name}` | 创建新项目目录并初始化 `settings.json` |
   | `GET` | `/api/projects/{name}` | 读取项目的 `settings.json` 配置 |
   | `PATCH` | `/api/projects/{name}/settings` | 更新项目的 `settings.json` 配置 |
-  | `POST` | `/api/projects/{name}/ocr` | 上传图片按项目的 `ocr_columns` 提取数据 |
+  | `POST` | `/api/projects/{name}/ocr` | 上传图片按项目的 `ocr_columns` 提取数据 (支持真实打字流) |
   | `GET` | `/api/projects/{name}/quotations` | 获取项目下的报价单列表 |
   | `POST` | `/api/projects/{name}/quotations` | 创建新报价单（quotation-{n}.json） |
   | `GET` | `/api/projects/{name}/quotations/{file}` | 读取指定报价单数据 |
@@ -121,7 +124,7 @@ export const PRESET_COLUMNS = [
 1. **启动开发**:
    - `bun run dev` (同时启动 Vite 前端与 Node/Express 服务)
 2. **测试运行**:
-   - `bun run test` (全量运行 36 项自动化单元测试与 API 契约测试)
+   - `bun run test` (全量运行 53 项自动化单元测试与 API 契约测试)
 
 ## 文档维护规范
 - 当修改核心 API、项目配置模型或标准列规范后，需同步更新本 `AGENTS.md`。

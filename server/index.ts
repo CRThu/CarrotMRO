@@ -373,9 +373,14 @@ app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
 
       // 修复：ocrRes.data 结构为 { items: [...], remarks: "" }
       // 应只取 items 数组存入 task.result，否则前端取到的是对象导致 length 为 undefined→0 行
+      const remarksList = Array.isArray(ocrRes.data?.remarks)
+        ? ocrRes.data.remarks
+        : (ocrRes.data?.remarks ? [String(ocrRes.data.remarks)] : []);
+
       const savePayload = {
         columns: ocrColumns,
         items: Array.isArray(ocrRes.data?.items) ? ocrRes.data.items : [],
+        remarks: remarksList,
       }
 
       const itemCount = Array.isArray(ocrRes.data?.items) ? ocrRes.data.items.length : 0

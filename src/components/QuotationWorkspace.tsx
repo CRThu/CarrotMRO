@@ -5,7 +5,7 @@ import { MatchPopover } from '@/components/MatchPopover';
 import { OcrProgressModal } from '@/components/OcrProgressModal';
 import { QuotationItem } from '@/types';
 import * as api from '@/api';
-import { Save, Download, Plus, Trash2, Image, Loader2, Maximize2 } from 'lucide-react';
+import { Save, Download, Plus, Trash2, Image, Loader2, Maximize2, HelpCircle, AlertCircle, MessageSquare } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 
@@ -21,6 +21,7 @@ interface QuotationWorkspaceProps {
   currentProject: string;
   activeQuotationFilename: string;
   quotationItems: QuotationItem[];
+  quotationRemarks?: string[];
   projectRateCard: string | null;
   projectTemplate: string | null;
   quotationColumns: string[];
@@ -29,6 +30,7 @@ interface QuotationWorkspaceProps {
   onDeleteRow: (index: number) => void;
   onSave: () => void;
   onQuotationDataChange: (items: QuotationItem[]) => void;
+  onQuotationRemarksChange?: (remarks: string[]) => void;
 }
 
 // 帮助函数：自动计算联动价格
@@ -65,6 +67,7 @@ export function QuotationWorkspace({
   currentProject,
   activeQuotationFilename,
   quotationItems,
+  quotationRemarks = [],
   projectRateCard,
   projectTemplate,
   quotationColumns,
@@ -73,6 +76,7 @@ export function QuotationWorkspace({
   onDeleteRow,
   onSave,
   onQuotationDataChange,
+  onQuotationRemarksChange,
 }: QuotationWorkspaceProps) {
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,13 +97,16 @@ export function QuotationWorkspace({
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 触发保存并更新状态
-  const triggerAutoSave = (itemsToSave: QuotationItem[]) => {
+  // 触发保存并更新状态 (含 items 与 remarks)
+  const triggerAutoSave = (itemsToSave: QuotationItem[], remarksToSave: string[] = quotationRemarks) => {
     setSaveStatus('saving');
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(async () => {
       try {
-        await api.saveQuotationData(currentProject, activeQuotationFilename, { items: itemsToSave });
+        await api.saveQuotationData(currentProject, activeQuotationFilename, {
+          items: itemsToSave,
+          remarks: remarksToSave,
+        });
         setSaveStatus('saved');
       } catch {
         setSaveStatus('error');
@@ -108,16 +115,21 @@ export function QuotationWorkspace({
   };
 
   // 接收上层 onQuotationDataChange 包装，自动同步触发防抖保存
-  const handleItemsChange = (newItems: QuotationItem[], immediate = false) => {
+  const handleItemsChange = (newItems: QuotationItem[], immediate = false, remarksToSave = quotationRemarks) => {
     onQuotationDataChange(newItems);
     if (immediate) {
       setSaveStatus('saving');
-      api.saveQuotationData(currentProject, activeQuotationFilename, { items: newItems })
+      api.saveQuotationData(currentProject, activeQuotationFilename, { items: newItems, remarks: remarksToSave })
         .then(() => setSaveStatus('saved'))
         .catch(() => setSaveStatus('error'));
     } else {
-      triggerAutoSave(newItems);
+      triggerAutoSave(newItems, remarksToSave);
     }
+  };
+
+  const handleRemarksChange = (newRemarks: string[]) => {
+    onQuotationRemarksChange?.(newRemarks);
+    triggerAutoSave(quotationItems, newRemarks);
   };
 
   const columnsToShow = quotationColumns && quotationColumns.length > 0
@@ -186,9 +198,16 @@ export function QuotationWorkspace({
             setActiveTaskId(null);
 
             const ocrItems: Record<string, string>[] = task.result?.items || task.result?.data || [];
+            const newRemarks: string[] = Array.isArray(task.result?.remarks)
+              ? task.result.remarks
+              : (task.result?.remarks ? [String(task.result.remarks)] : []);
+
             setOcrExtractedCount(ocrItems.length);
 
-            if (ocrItems.length > 0) {
+            const combinedRemarks = Array.from(new Set([...quotationRemarks, ...newRemarks]));
+            onQuotationRemarksChange?.(combinedRemarks);
+
+            if (ocrItems.length > 0 || newRemarks.length > 0) {
               const newQuotationItems: QuotationItem[] = ocrItems.map(raw => {
                 const item: QuotationItem = { _matchStatus: 'pending' };
                 columnsToShow.forEach(col => {
@@ -197,7 +216,7 @@ export function QuotationWorkspace({
                 return calculateRowFormulas(item);
               });
               const combined = [...quotationItems, ...newQuotationItems];
-              handleItemsChange(combined, true); // OCR 提取完成后立即写盘持久化
+              handleItemsChange(combined, true, combinedRemarks); // OCR 提取完成后立即写盘持久化
             }
           } else if (task.status === 'error') {
             clearInterval(timer);
@@ -473,20 +492,85 @@ export function QuotationWorkspace({
             </div>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onAddRow();
-              const emptyRow: QuotationItem = { _matchStatus: 'pending' };
-              const next = [...quotationItems, emptyRow];
-              handleItemsChange(next);
-            }}
-            className="mt-4 text-xs text-gray-600 border-dashed"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />
-            新增数据行
-          </Button>
+          <div className="mt-4 flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onAddRow();
+                const emptyRow: QuotationItem = { _matchStatus: 'pending' };
+                const next = [...quotationItems, emptyRow];
+                handleItemsChange(next);
+              }}
+              className="text-xs text-gray-600 border-dashed"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              新增数据行
+            </Button>
+          </div>
+
+          {/* 识别提示与复核备注栏 (跟随报价单 JSON 数据保存) */}
+          <div className="mt-6 border border-amber-200/80 bg-amber-50/50 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>识别提示与复核备注</span>
+                <span className="text-[11px] font-normal text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-mono">
+                  {quotationRemarks.length} 条
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const next = [...quotationRemarks, ''];
+                  handleRemarksChange(next);
+                }}
+                className="h-7 text-xs text-amber-800 hover:text-amber-900 hover:bg-amber-100/60"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                添加复核备注
+              </Button>
+            </div>
+
+            {quotationRemarks.length === 0 ? (
+              <div className="text-xs text-amber-600/70 italic py-1">
+                暂无识别疑义或手动备注（OCR 识别时若发现字迹模糊或争议字段将在此处自动汇总）
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {quotationRemarks.map((remark, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-white/90 p-2 rounded-lg border border-amber-200/60 text-xs shadow-xs">
+                    <span className="text-[11px] font-mono font-medium text-amber-600 bg-amber-100/70 px-1.5 py-0.5 rounded shrink-0 select-none">
+                      #{idx + 1}
+                    </span>
+                    <Input
+                      value={remark}
+                      onChange={(e) => {
+                        const next = [...quotationRemarks];
+                        next[idx] = e.target.value;
+                        handleRemarksChange(next);
+                      }}
+                      placeholder="编辑备注内容或疑义说明..."
+                      className="h-7 text-xs border-transparent hover:border-amber-200 focus:border-amber-400 focus:bg-white bg-transparent"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const next = quotationRemarks.filter((_, i) => i !== idx);
+                        handleRemarksChange(next);
+                      }}
+                      className="h-7 w-7 text-amber-400 hover:text-red-500 hover:bg-red-50 shrink-0"
+                      title="删除此项备注"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

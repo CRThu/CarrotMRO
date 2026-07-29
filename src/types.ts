@@ -30,6 +30,13 @@ export type QuotationItem = TableItem & {
   '清单名称'?: string;
 };
 
+export interface QuotationData {
+  created_at?: string;
+  last_edit_time?: string;
+  items: QuotationItem[];
+  remarks?: string[];
+}
+
 export type RateCardTableData = {
   columns: string[];
   items: TableItem[];
