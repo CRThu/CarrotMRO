@@ -89,9 +89,42 @@ export function QuotationWorkspace({
   const [matchCandidatesMap, setMatchCandidatesMap] = useState<Record<number, MatchCandidate[]>>({});
   const [matchLoadingMap, setMatchLoadingMap] = useState<Record<number, boolean>>({});
 
+  // 自动保存状态: 'saved' | 'saving' | 'error'
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 触发保存并更新状态
+  const triggerAutoSave = (itemsToSave: QuotationItem[]) => {
+    setSaveStatus('saving');
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await api.saveQuotationData(currentProject, activeQuotationFilename, { items: itemsToSave });
+        setSaveStatus('saved');
+      } catch {
+        setSaveStatus('error');
+      }
+    }, 1200);
+  };
+
+  // 接收上层 onQuotationDataChange 包装，自动同步触发防抖保存
+  const handleItemsChange = (newItems: QuotationItem[], immediate = false) => {
+    onQuotationDataChange(newItems);
+    if (immediate) {
+      setSaveStatus('saving');
+      api.saveQuotationData(currentProject, activeQuotationFilename, { items: newItems })
+        .then(() => setSaveStatus('saved'))
+        .catch(() => setSaveStatus('error'));
+    } else {
+      triggerAutoSave(newItems);
+    }
+  };
+
   const columnsToShow = quotationColumns && quotationColumns.length > 0
     ? quotationColumns
     : ['项目组', '项目名称', '单位', '数量', '不含税单价', '不含税总价', '税率', '含税单价', '含税总价', '说明'];
+
+  const [ocrStreamText, setOcrStreamText] = useState('');
 
   // 手动取消/终止任务
   const handleCancelTask = async () => {
@@ -100,8 +133,8 @@ export function QuotationWorkspace({
       await api.cancelTask(activeTaskId);
     } catch {}
     setOcrStatus('error');
-    setOcrErrorMessage('已人工中止该识别任务。');
-    setOcrCurrentStep('任务已人工取消');
+    setOcrErrorMessage('已中止识别任务。');
+    setOcrCurrentStep('任务已取消');
     setActiveTaskId(null);
   };
 
@@ -114,6 +147,7 @@ export function QuotationWorkspace({
     setOcrImageCount(count);
     setOcrStatus('processing');
     setOcrLogs([`[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] 准备上传 ${count} 张图片...`]);
+    setOcrStreamText('');
     setOcrErrorMessage(undefined);
     setOcrExtractedCount(0);
     setOcrModalOpen(true);
@@ -142,6 +176,10 @@ export function QuotationWorkspace({
             setOcrLogs(task.logs);
           }
 
+          if (typeof task.streamText === 'string') {
+            setOcrStreamText(task.streamText);
+          }
+
           if (task.status === 'done') {
             clearInterval(timer);
             setOcrStatus('done');
@@ -158,7 +196,8 @@ export function QuotationWorkspace({
                 });
                 return calculateRowFormulas(item);
               });
-              onQuotationDataChange([...quotationItems, ...newQuotationItems]);
+              const combined = [...quotationItems, ...newQuotationItems];
+              handleItemsChange(combined, true); // OCR 提取完成后立即写盘持久化
             }
           } else if (task.status === 'error') {
             clearInterval(timer);
@@ -198,7 +237,7 @@ export function QuotationWorkspace({
       link.click();
       link.remove();
     } catch {
-      alert('导出报价单失败，请检查是否已关联有效的 Excel 模板');
+      alert('导出失败，请先关联有效的 Excel 模板');
     }
   };
 
@@ -243,19 +282,17 @@ export function QuotationWorkspace({
     const finalItem = calculateRowFormulas(updatedItem);
     const newItems = [...quotationItems];
     newItems[itemIndex] = finalItem;
-    onQuotationDataChange(newItems);
+    handleItemsChange(newItems);
   };
 
   const handleCellChange = (index: number, col: string, val: string) => {
     const current = quotationItems[index] || {};
     const updated = { ...current, [col]: val };
     const calculated = calculateRowFormulas(updated, col);
-    onEdit(index, col, calculated[col]);
-    Object.keys(calculated).forEach(k => {
-      if (k !== col && calculated[k] !== current[k]) {
-        onEdit(index, k, calculated[k]);
-      }
-    });
+    
+    const nextItems = [...quotationItems];
+    nextItems[index] = calculated;
+    handleItemsChange(nextItems);
   };
 
   return (
@@ -267,12 +304,33 @@ export function QuotationWorkspace({
             {currentProject} / <span className="font-normal text-blue-600">{activeQuotationFilename}</span>
           </h1>
           <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
-            <span>关联定价单: <strong className="text-gray-700">{projectRateCard || '未关联'}</strong></span>
-            <span>关联模板: <strong className="text-gray-700">{projectTemplate || '未关联'}</strong></span>
+            <span>定价单: <strong className="text-gray-700">{projectRateCard || '未关联'}</strong></span>
+            <span>模板: <strong className="text-gray-700">{projectTemplate || '未关联'}</strong></span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          {/* 实时自动保存状态栏 */}
+          <div className="text-xs flex items-center gap-1.5 px-2.5 py-1 rounded border bg-gray-50 border-gray-200">
+            {saveStatus === 'saved' && (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span className="text-gray-500">已自动保存</span>
+              </>
+            )}
+            {saveStatus === 'saving' && (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                <span className="text-blue-600 font-medium">正在保存...</span>
+              </>
+            )}
+            {saveStatus === 'error' && (
+              <span className="text-red-500 cursor-pointer" onClick={() => handleItemsChange(quotationItems, true)}>
+                ⚠️ 保存失败(点击重试)
+              </span>
+            )}
+          </div>
+
           <input
             ref={ocrFileInputRef}
             type="file"
@@ -285,23 +343,18 @@ export function QuotationWorkspace({
             variant="outline"
             size="sm"
             onClick={() => ocrFileInputRef.current?.click()}
-            className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            className="border-purple-300 text-purple-700 hover:bg-purple-50 text-xs"
           >
-            <Image className="h-4 w-4 mr-1.5" />
-            图片 OCR 识别导入
+            <Image className="h-3.5 w-3.5 mr-1" />
+            OCR 导入
           </Button>
 
           {projectTemplate && (
-            <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700">
-              <Download className="h-4 w-4 mr-1.5" />
-              导出 Excel
+            <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700 text-xs">
+              <Download className="h-3.5 w-3.5 mr-1" />
+              导出
             </Button>
           )}
-
-          <Button onClick={onSave} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-            <Save className="h-4 w-4 mr-1.5" />
-            保存报价单
-          </Button>
         </div>
       </div>
 
@@ -359,7 +412,7 @@ export function QuotationWorkspace({
                           onMarkCustom={() => {
                             const newItems = [...quotationItems];
                             newItems[i] = { ...item, _matchStatus: 'custom' };
-                            onQuotationDataChange(newItems);
+                            handleItemsChange(newItems);
                           }}
                         />
                       ) : (
@@ -381,7 +434,13 @@ export function QuotationWorkspace({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => onAddRow(i)}
+                          onClick={() => {
+                            onAddRow(i);
+                            const emptyRow: QuotationItem = { _matchStatus: 'pending' };
+                            const next = [...quotationItems];
+                            next.splice(i + 1, 0, emptyRow);
+                            handleItemsChange(next);
+                          }}
                           className="h-7 w-7 text-gray-400 hover:text-green-600"
                           title="插入下一行"
                         >
@@ -390,7 +449,11 @@ export function QuotationWorkspace({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => onDeleteRow(i)}
+                          onClick={() => {
+                            onDeleteRow(i);
+                            const next = quotationItems.filter((_, idx) => idx !== i);
+                            handleItemsChange(next);
+                          }}
                           className="h-7 w-7 text-gray-400 hover:text-red-500"
                           title="删除当前行"
                         >
@@ -405,18 +468,23 @@ export function QuotationWorkspace({
           </Table>
 
           {quotationItems.length === 0 && (
-            <div className="text-center py-10 text-gray-400 text-sm">
-              报价单暂无数据，点击上方“图片 OCR 识别导入”（支持同时勾选多张图）或下方“新增行”开始填写
+            <div className="text-center py-10 text-gray-400 text-xs">
+              暂无数据，点击上方“OCR 导入”或下方“新增行”开始填写
             </div>
           )}
 
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onAddRow()}
-            className="mt-4 text-gray-600 border-dashed"
+            onClick={() => {
+              onAddRow();
+              const emptyRow: QuotationItem = { _matchStatus: 'pending' };
+              const next = [...quotationItems, emptyRow];
+              handleItemsChange(next);
+            }}
+            className="mt-4 text-xs text-gray-600 border-dashed"
           >
-            <Plus className="h-4 w-4 mr-1.5" />
+            <Plus className="h-3.5 w-3.5 mr-1" />
             新增数据行
           </Button>
         </CardContent>
@@ -429,6 +497,7 @@ export function QuotationWorkspace({
         imageCount={ocrImageCount}
         currentStep={ocrCurrentStep}
         logs={ocrLogs}
+        streamText={ocrStreamText}
         errorMessage={ocrErrorMessage}
         itemCount={ocrExtractedCount}
         onClose={() => setOcrModalOpen(false)}

@@ -126,7 +126,7 @@ export async function runOcrWithLlm(
   images: ImageInput[],
   columns: string[],
   overrideConfig?: SimpleLlmConfig,
-  onProgress?: (step: string) => void
+  onProgress?: (step: string, rawChunk?: string) => void
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   const activeConfig = getActiveProviderConfig();
   const config: SimpleLlmConfig = overrideConfig || {
@@ -147,11 +147,7 @@ export async function runOcrWithLlm(
   const baseUrl = resolveBaseUrl(config);
   const prompt = buildOcrPrompt(columns, images.length);
 
-  onProgress?.(`已构建 Prompt（共 ${images.length} 张图片），正在打包至单次 API 请求...`);
-
-  // 构建单次请求的多图 payload content 数组
   const contentItems: any[] = [{ type: 'text', text: prompt }];
-
   for (let i = 0; i < images.length; i++) {
     const img = images[i];
     const b64 = img.buffer.toString('base64');
@@ -165,68 +161,129 @@ export async function runOcrWithLlm(
 
   const url = `${baseUrl}/chat/completions`;
   const axiosConfig = createAxiosConfig(config);
-
   const providerName = config.provider || 'API';
   const modelName = config.model || 'default';
 
-  onProgress?.(`正在发送请求至大模型 [${providerName} - ${modelName}]...`);
+  // 自动重试控制参数
+  const maxRetries = 3;
+  let lastError = '';
 
-  try {
-    let response;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const retryPrefix = attempt > 1 ? `[自动重试 ${attempt}/${maxRetries}] ` : '';
+    onProgress?.(`${retryPrefix}正在发送请求至 [${providerName} - ${modelName}]...`);
+
+    const startTime = Date.now();
     try {
-      // 尝试包含 response_format 的严格模式
-      response = await axios.post(
-        url,
-        {
-          model: modelName,
-          messages: [{ role: 'user', content: contentItems }],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-        },
-        axiosConfig
-      );
-    } catch (firstErr: any) {
-      // 如果服务商/模型不支持 response_format，尝试回退降级模式
-      console.warn('含有 response_format 请求失败，尝试退回通用模式:', firstErr.message);
-      onProgress?.(`服务商 [${providerName}] 响应异常: ${firstErr.message}。正在尝试通用模式无约束重发...`);
+      // 1. 尝试开启 response_format 强制 JSON 模式 + stream 流式
+      let response;
+      let isStreamSupported = true;
 
-      response = await axios.post(
-        url,
-        {
-          model: modelName,
-          messages: [{ role: 'user', content: contentItems }],
-          temperature: 0.1,
-        },
-        axiosConfig
-      );
+      try {
+        response = await axios.post(
+          url,
+          {
+            model: modelName,
+            messages: [{ role: 'user', content: contentItems }],
+            response_format: { type: 'json_object' }, // 协议级别标准 JSON 模式约束
+            temperature: 0.1,
+            stream: true,
+          },
+          {
+            ...axiosConfig,
+            responseType: 'stream',
+          }
+        );
+      } catch (streamErr: any) {
+        // 部分中转服务商不支持 response_format 或 stream，尝试降级
+        console.warn('含有 response_format 的流式请求未获支持，降级尝试无约束流式:', streamErr.message);
+        isStreamSupported = false;
+
+        response = await axios.post(
+          url,
+          {
+            model: modelName,
+            messages: [{ role: 'user', content: contentItems }],
+            temperature: 0.1,
+            stream: true,
+          },
+          {
+            ...axiosConfig,
+            responseType: 'stream',
+          }
+        );
+      }
+
+      let fullText = '';
+      let lastLogTime = Date.now();
+
+      await new Promise<void>((resolve, reject) => {
+        const stream = response.data;
+        let buffer = '';
+
+        stream.on('data', (chunk: Buffer) => {
+          buffer += chunk.toString('utf-8');
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === 'data: [DONE]') continue;
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const delta = json.choices?.[0]?.delta;
+                const textChunk = delta?.content || delta?.reasoning_content || '';
+                if (textChunk) {
+                  fullText += textChunk;
+                  const now = Date.now();
+                  // 实时回调原始文本，供前端真实流打字渲染
+                  onProgress?.('', textChunk);
+
+                  if (now - lastLogTime > 400) {
+                    lastLogTime = now;
+                    const elapsedSec = ((now - startTime) / 1000).toFixed(1);
+                    onProgress?.(`${retryPrefix}AI 实时提取中 (${elapsedSec}s) › 已输出 ${fullText.length} 字符`);
+                  }
+                }
+              } catch {}
+            }
+          }
+        });
+
+        stream.on('end', () => resolve());
+        stream.on('error', (err: any) => reject(err));
+      });
+
+      const parsedData = extractJsonFromText(fullText);
+      if (!parsedData) {
+        throw new Error(`无法从模型返回提取有效 JSON 格式数据 (返回长度: ${fullText.length})`);
+      }
+
+      let finalData = parsedData;
+      if (!finalData.items) {
+        finalData = {
+          items: Array.isArray(parsedData) ? parsedData : [parsedData],
+          remarks: '',
+        };
+      }
+      if (!finalData.remarks) finalData.remarks = '';
+
+      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+      onProgress?.(`数据提取成功 (总耗时 ${elapsedSec}s)`);
+      return { success: true, data: finalData };
+
+    } catch (attemptErr: any) {
+      lastError = attemptErr.response?.data?.error?.message || attemptErr.message || String(attemptErr);
+      console.warn(`OCR 识别第 ${attempt} 次尝试失败:`, lastError);
+
+      if (attempt < maxRetries) {
+        onProgress?.(`[自动重试 ${attempt}/${maxRetries}] 遇到响应抖动: ${lastError}，等待 1 秒后自动重试...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
-
-    onProgress?.('大模型数据接收完毕，正在校验提取 JSON 结构...');
-
-    const content = response.data?.choices?.[0]?.message?.content || '';
-    const parsedData = extractJsonFromText(typeof content === 'string' ? content : JSON.stringify(content));
-
-    if (!parsedData) {
-      return { success: false, error: `无法解析模型返回的 JSON 内容: ${String(content).substring(0, 200)}` };
-    }
-
-    let finalData = parsedData;
-    if (!finalData.items) {
-      finalData = {
-        items: Array.isArray(parsedData) ? parsedData : [parsedData],
-        remarks: '',
-      };
-    }
-    if (!finalData.remarks) {
-      finalData.remarks = '';
-    }
-
-    return { success: true, data: finalData };
-  } catch (err: any) {
-    const errMsg = err.response?.data?.error?.message || err.response?.data?.detail || err.message || String(err);
-    console.error('LLM OCR 识别失败:', errMsg);
-    return { success: false, error: `服务商 [${providerName}] 识别请求失败: ${errMsg}` };
   }
+
+  return { success: false, error: `服务商 [${providerName}] 经过 ${maxRetries} 次重试依然失败: ${lastError}` };
 }
 
 /**

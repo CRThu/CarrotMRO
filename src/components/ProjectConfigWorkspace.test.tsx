@@ -27,9 +27,9 @@ describe('ProjectConfigWorkspace Component', () => {
     render(<ProjectConfigWorkspace {...defaultProps} />)
     expect(screen.getByText('项目设置: 测试项目A')).toBeInTheDocument()
     expect(screen.getByText('关联协议定价表')).toBeInTheDocument()
-    expect(screen.getByText('关联报价单 Excel 模板')).toBeInTheDocument()
-    expect(screen.getByText('OCR 图像识别提取列规范')).toBeInTheDocument()
-    expect(screen.getByText('报价单所需展示与编辑列规范')).toBeInTheDocument()
+    expect(screen.getByText('关联 Excel 导出模板')).toBeInTheDocument()
+    expect(screen.getByText('OCR 识别提取字段')).toBeInTheDocument()
+    expect(screen.getByText('报价单表格展示字段')).toBeInTheDocument()
   })
 
   it('2. 点击 OCR 提取列复选框可以触发 onUpdateSettings 更新列', () => {

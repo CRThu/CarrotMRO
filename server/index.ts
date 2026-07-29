@@ -327,6 +327,7 @@ app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
     status: 'processing',
     progress: initStep,
     logs: [`[${initTime}] ${initStep}`],
+    streamText: '',
   }
   res.json({ task_id: taskId });
 
@@ -341,14 +342,19 @@ app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
         imageInputs,
         ocrColumns,
         undefined,
-        (progressStep) => {
+        (progressStep, rawChunk) => {
           if (!tasks[taskId]) return
-          tasks[taskId].progress = progressStep
-          if (!tasks[taskId].logs) tasks[taskId].logs = []
-          const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-          const lastLog = tasks[taskId].logs[tasks[taskId].logs.length - 1]
-          if (!lastLog || !lastLog.includes(progressStep)) {
-            tasks[taskId].logs.push(`[${timeStr}] ${progressStep}`)
+          if (rawChunk) {
+            tasks[taskId].streamText = (tasks[taskId].streamText || '') + rawChunk
+          }
+          if (progressStep) {
+            tasks[taskId].progress = progressStep
+            if (!tasks[taskId].logs) tasks[taskId].logs = []
+            const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+            const lastLog = tasks[taskId].logs[tasks[taskId].logs.length - 1]
+            if (!lastLog || !lastLog.includes(progressStep)) {
+              tasks[taskId].logs.push(`[${timeStr}] ${progressStep}`)
+            }
           }
         }
       )

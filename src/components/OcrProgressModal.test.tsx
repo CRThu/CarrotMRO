@@ -29,7 +29,7 @@ describe('OcrProgressModal Component', () => {
         onClose={vi.fn()}
       />
     )
-    expect(screen.getByText(/AI 多图智能 OCR 提取中 \(共 3 张图片\)/)).toBeInTheDocument()
+    expect(screen.getByText(/OCR 识别中 \(共 3 张图片\)/)).toBeInTheDocument()
     expect(screen.getByText('大模型推理中...')).toBeInTheDocument()
     expect(screen.getByText('[12:00:00] 开始任务')).toBeInTheDocument()
     expect(screen.getByText('[12:00:01] 已发送请求至大模型')).toBeInTheDocument()
@@ -48,7 +48,7 @@ describe('OcrProgressModal Component', () => {
         onClose={onCloseMock}
       />
     )
-    expect(screen.getByText('识别中断或产生错误')).toBeInTheDocument()
+    expect(screen.getByText('识别中断')).toBeInTheDocument()
     expect(screen.getByText('API Key 无效或请求超限')).toBeInTheDocument()
 
     const closeBtn = screen.getByText('关闭窗口')
@@ -71,8 +71,8 @@ describe('OcrProgressModal Component', () => {
     )
     expect(screen.getByText('识别完成！表格数据提取成功')).toBeInTheDocument()
     // 提取行数必须显示正确值 24，而不是 0
-    expect(screen.getByText(/共提取/)).toHaveTextContent('24')
-    expect(screen.queryByText(/共提取 0 行/)).not.toBeInTheDocument()
+    expect(screen.getByText(/成功提取/)).toHaveTextContent('24')
+    expect(screen.queryByText(/成功提取 0 行/)).not.toBeInTheDocument()
   })
 
   it('5. done 状态下 itemCount 为 0 时正确显示 0（合法边界，不崩溃）', () => {
@@ -89,7 +89,7 @@ describe('OcrProgressModal Component', () => {
     )
     // 应仍然展示成功状态，但行数为 0
     expect(screen.getByText('识别完成！表格数据提取成功')).toBeInTheDocument()
-    expect(screen.getByText(/共提取/)).toHaveTextContent('0')
+    expect(screen.getByText(/成功提取/)).toHaveTextContent('0')
   })
 })
 

@@ -50,28 +50,27 @@ export function ProjectConfigWorkspace({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-light text-gray-800">项目设置: {currentProject}</h1>
-          <p className="text-sm text-gray-500 mt-1">管理项目关联的定价单、导出模板以及提取与展示列规范</p>
+          <h1 className="text-2xl font-light text-gray-800">项目设置: {currentProject}</h1>
+          <p className="text-xs text-gray-500 mt-1">配置关联定价表、Excel 模板及展示与识别字段</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* 关联协议定价表 */}
         <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-medium">关联协议定价表</CardTitle>
+          <CardHeader className="py-4">
+            <CardTitle className="text-base font-medium">关联协议定价表</CardTitle>
           </CardHeader>
           <CardContent>
-            <label className="block text-sm text-gray-600 mb-2">选择在报价单中比对计价的定价表:</label>
             <select
               value={settings.ratecard_name || ''}
               onChange={(e) => onUpdateSettings({ ratecard_name: e.target.value || null })}
-              className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full p-2 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="">未关联 (暂不比对)</option>
+              <option value="">未关联定价表</option>
               {rateCards.map(rc => <option key={rc} value={rc}>{rc}</option>)}
             </select>
           </CardContent>
@@ -79,8 +78,8 @@ export function ProjectConfigWorkspace({
 
         {/* 关联报价单 Excel 模板 */}
         <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-medium">关联报价单 Excel 模板</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between py-4">
+            <CardTitle className="text-base font-medium">关联 Excel 导出模板</CardTitle>
             <div>
               <input
                 ref={fileInputRef}
@@ -93,35 +92,35 @@ export function ProjectConfigWorkspace({
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
+                className="text-xs h-8"
               >
-                <Upload className="h-4 w-4 mr-1.5" />
+                <Upload className="h-3.5 w-3.5 mr-1" />
                 上传模板
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <label className="block text-sm text-gray-600 mb-2">选择导出 Excel 报价单时使用的模板:</label>
             <select
               value={settings.template_name || ''}
               onChange={(e) => onUpdateSettings({ template_name: e.target.value || null })}
-              className="w-full p-2.5 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full p-2 border border-gray-300 rounded-lg text-xs mb-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <option value="">未关联模板</option>
               {templates.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
 
             {templates.length > 0 && (
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-40 overflow-y-auto">
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-32 overflow-y-auto">
                 {templates.map(t => (
-                  <div key={t} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50">
+                  <div key={t} className="flex items-center justify-between px-3 py-1.5 text-xs hover:bg-gray-50">
                     <span className="truncate text-gray-700">{t}</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-gray-400 hover:text-red-500"
+                      className="h-6 w-6 text-gray-400 hover:text-red-500"
                       onClick={() => onDeleteTemplate(t)}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 ))}
@@ -133,17 +132,14 @@ export function ProjectConfigWorkspace({
 
       {/* OCR 图像抽取识别列配置 */}
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-medium flex items-center justify-between">
-            <span>OCR 图像识别提取列规范</span>
-            <span className="text-xs font-normal text-gray-400">已选中 {(settings.ocr_columns || []).length} / {PRESET_COLUMNS.length} 列</span>
+        <CardHeader className="py-4">
+          <CardTitle className="text-base font-medium flex items-center justify-between">
+            <span>OCR 识别提取字段</span>
+            <span className="text-xs font-normal text-gray-400">已选 {(settings.ocr_columns || []).length} / {PRESET_COLUMNS.length}</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500 mb-4">
-            在报价单中使用“图片 OCR 识别导入”时，大模型将严格提取以下勾选的字段：
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
             {PRESET_COLUMNS.map(col => {
               const checked = (settings.ocr_columns || []).includes(col);
               return (
@@ -151,14 +147,14 @@ export function ProjectConfigWorkspace({
                   key={col}
                   type="button"
                   onClick={() => toggleOcrColumn(col)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                     checked
                       ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm'
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
                   <span>{col}</span>
-                  {checked ? <CheckSquare className="h-4 w-4 text-blue-600 ml-1.5" /> : <Square className="h-4 w-4 text-gray-300 ml-1.5" />}
+                  {checked ? <CheckSquare className="h-3.5 w-3.5 text-blue-600 ml-1" /> : <Square className="h-3.5 w-3.5 text-gray-300 ml-1" />}
                 </button>
               );
             })}
@@ -168,17 +164,14 @@ export function ProjectConfigWorkspace({
 
       {/* 报价单展示列配置 */}
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-medium flex items-center justify-between">
-            <span>报价单所需展示与编辑列规范</span>
-            <span className="text-xs font-normal text-gray-400">已选中 {(settings.quotation_columns || []).length} / {PRESET_COLUMNS.length} 列</span>
+        <CardHeader className="py-4">
+          <CardTitle className="text-base font-medium flex items-center justify-between">
+            <span>报价单表格展示字段</span>
+            <span className="text-xs font-normal text-gray-400">已选 {(settings.quotation_columns || []).length} / {PRESET_COLUMNS.length}</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500 mb-4">
-            当前项目下的所有报价单表格将动态渲染以下勾选的列（支持包含/不包含税及价格公式实时联动）：
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
             {PRESET_COLUMNS.map(col => {
               const checked = (settings.quotation_columns || []).includes(col);
               return (
@@ -186,14 +179,14 @@ export function ProjectConfigWorkspace({
                   key={col}
                   type="button"
                   onClick={() => toggleQuotationColumn(col)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                     checked
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
                       : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                   }`}
                 >
                   <span>{col}</span>
-                  {checked ? <CheckSquare className="h-4 w-4 text-emerald-600 ml-1.5" /> : <Square className="h-4 w-4 text-gray-300 ml-1.5" />}
+                  {checked ? <CheckSquare className="h-3.5 w-3.5 text-emerald-600 ml-1" /> : <Square className="h-3.5 w-3.5 text-gray-300 ml-1" />}
                 </button>
               );
             })}

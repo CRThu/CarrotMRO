@@ -30,10 +30,10 @@ describe('SettingsWorkspace Component', () => {
     render(<SettingsWorkspace />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/输入 Google Gemini 对应的 API Key/i)).toHaveValue('sk-google-123');
+      expect(screen.getByPlaceholderText(/输入 Google Gemini API Key/i)).toHaveValue('sk-google-123');
     });
 
-    expect(screen.getByText(/LLM 多模型 API 接入配置/i)).toBeInTheDocument();
+    expect(screen.getByText(/LLM 模型服务商接入/i)).toBeInTheDocument();
   });
 
   it('能够修改当前 Provider Key 配置并保存所有设置', async () => {
@@ -55,18 +55,55 @@ describe('SettingsWorkspace Component', () => {
     render(<SettingsWorkspace />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/输入 Google Gemini 对应的 API Key/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/输入 Google Gemini API Key/i)).toBeInTheDocument();
     });
 
-    const apiKeyInput = screen.getByPlaceholderText(/输入 Google Gemini 对应的 API Key/i);
+    const apiKeyInput = screen.getByPlaceholderText(/输入 Google Gemini API Key/i);
     fireEvent.change(apiKeyInput, { target: { value: 'sk-my-new-key' } });
 
-    const saveBtn = screen.getByRole('button', { name: /保存所有配置/i });
+    const saveBtn = screen.getByRole('button', { name: /保存配置/i });
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
       expect(api.updateSettings).toHaveBeenCalled();
-      expect(screen.getByText(/配置已成功保存/i)).toBeInTheDocument();
+      expect(screen.getByText(/配置已/i)).toBeInTheDocument();
+    });
+  });
+
+  it('点击切换服务商卡片时能够触发即选即存自动保存', async () => {
+    (api.getSettings as any).mockResolvedValue({
+      data: {
+        llm: {
+          activeProvider: 'google',
+          providers: {
+            google: { apiKey: 'sk-google-123', model: 'gemini-3.6-flash', baseUrl: '', proxy: '' },
+            deepseek: { apiKey: 'sk-deepseek-456', model: 'deepseek-v4', baseUrl: '', proxy: '' },
+          },
+        },
+      },
+    });
+
+    (api.updateSettings as any).mockResolvedValue({
+      data: { success: true },
+    });
+
+    render(<SettingsWorkspace />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Google Gemini')).toBeInTheDocument();
+    });
+
+    // 点击 DeepSeek 服务商卡片
+    const deepseekCard = screen.getByText('DeepSeek');
+    fireEvent.click(deepseekCard);
+
+    await waitFor(() => {
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        llm: expect.objectContaining({
+          activeProvider: 'deepseek',
+        }),
+      });
+      expect(screen.getByText(/配置已自动保存/i)).toBeInTheDocument();
     });
   });
 });

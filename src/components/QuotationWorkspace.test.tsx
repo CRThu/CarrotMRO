@@ -82,4 +82,29 @@ describe('QuotationWorkspace & Formulas', () => {
     fireEvent.click(addBtn)
     expect(mockProps.onAddRow).toHaveBeenCalled()
   })
+
+  it('6. 渲染实时自动保存状态，且修改单元格内容能够触发 onQuotationDataChange', () => {
+    const mockProps = {
+      currentProject: '项目A',
+      activeQuotationFilename: 'quotation-1.json',
+      quotationItems: [{ '项目名称': '旧物料', '数量': '1' }],
+      projectRateCard: null,
+      projectTemplate: null,
+      quotationColumns: ['项目名称', '数量'],
+      onEdit: vi.fn(),
+      onAddRow: vi.fn(),
+      onDeleteRow: vi.fn(),
+      onSave: vi.fn(),
+      onQuotationDataChange: vi.fn(),
+    }
+    render(<QuotationWorkspace {...mockProps} />)
+    expect(screen.getByText('已自动保存')).toBeInTheDocument()
+
+    const input = screen.getByDisplayValue('旧物料')
+    fireEvent.change(input, { target: { value: '新物料' } })
+
+    expect(mockProps.onQuotationDataChange).toHaveBeenCalledWith([
+      expect.objectContaining({ '项目名称': '新物料' }),
+    ])
+  })
 })
