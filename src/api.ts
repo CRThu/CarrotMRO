@@ -41,7 +41,7 @@ export const getRateCardData = (ratecardName: string) =>
 
 /** 定价表导入预览（解析原始表头与前 5 行样例） */
 export const previewRateCardImport = (ratecardName: string, formData: FormData) =>
-  axios.post<{ headers: string[]; sampleRows: Record<string, string>[] }>(`/api/ratecards/${ratecardName}/import-preview`, formData);
+  axios.post<{ headers: string[]; sampleRows: Record<string, string>[]; allRows: Record<string, string>[] }>(`/api/ratecards/${ratecardName}/import-preview`, formData);
 
 /** 确认表头映射后，最终导入保存定价表 */
 export const importRateCardFile = (ratecardName: string, payload: { headers: string[]; items: Record<string, string>[]; mapping: Record<string, string> }) =>

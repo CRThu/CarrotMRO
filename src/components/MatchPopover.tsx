@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Circle, CheckCircle, AlertCircle, Search } from 'lucide-react';
+import { Circle, CheckCircle, AlertCircle, Search, Loader2 } from 'lucide-react';
 
 interface MatchCandidate {
   name: string;
@@ -63,9 +63,20 @@ export function MatchPopover({ status, itemName, baseName, candidates, loading, 
         </div>
         <div className="max-h-64 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-sm text-gray-400">匹配中...</div>
+            <div className="p-8 text-center text-sm text-blue-600 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>正在协议定价库中检索匹配物料...</span>
+            </div>
           ) : candidates.length === 0 ? (
-            <div className="p-4 text-center text-sm text-gray-400">无候选结果</div>
+            <div className="p-6 text-center space-y-2">
+              <div className="inline-flex p-2.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 mb-1">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-medium text-gray-700">未在关联定价表中找到相似物料</p>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto leading-relaxed">
+                可能原因：定价表中暂未包含该物料，或导入协议定价表时未将 Excel 中的列手动映射到系统「项目名称」
+              </p>
+            </div>
           ) : (
             <table className="w-full text-xs">
               <thead>

@@ -97,7 +97,7 @@ export const PRESET_COLUMNS = [
   | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除报价单 |
 
 ### 2. 协议定价表管理
-- **功能**: 管理协议定价表。上传 Excel/CSV 时先解析表头提供映射弹窗，用户将原始表头映射到 10 项标准列后确认导入。
+- **功能**: 管理协议定价表。上传 Excel/CSV 时先解析表头提供映射弹窗，系统仅对 100% 精确同名的列自动预先勾选，非同名的原始列保持留空由用户手动下拉指定，确认后将数据清洗归一化并持久化到 JSON。
 - **存储**: 保存为干净的 `data/ratecard/{名称}.json`：
   ```json
   {
@@ -124,7 +124,7 @@ export const PRESET_COLUMNS = [
 1. **启动开发**:
    - `bun run dev` (同时启动 Vite 前端与 Node/Express 服务)
 2. **测试运行**:
-   - `bun run test` (全量运行 53 项自动化单元测试与 API 契约测试)
+   - `bun run test` (全量运行 56 项自动化单元测试与 API 契约测试)
 
 ## 文档维护规范
 - 当修改核心 API、项目配置模型或标准列规范后，需同步更新本 `AGENTS.md`。

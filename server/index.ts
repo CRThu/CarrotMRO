@@ -453,7 +453,7 @@ app.get('/api/ratecards/:name', async (req, res) => {
   }
 })
 
-// 定价表导入预览 (解析 Excel/CSV 表头与示例数据)
+// 定价表导入预览 (解析 Excel/CSV 表头、自动填充合并单元格组名与示例数据)
 app.post('/api/ratecards/:name/import-preview', upload.single('file'), async (req, res) => {
   const file = req.file
   if (!file) {
@@ -464,6 +464,23 @@ app.post('/api/ratecards/:name/import-preview', upload.single('file'), async (re
     const workbook = XLSX.read(file.buffer, { type: 'buffer' })
     const sheetName = workbook.SheetNames[0]
     const sheet = workbook.Sheets[sheetName]
+
+    // 处理 Excel 合并单元格 (sheet['!merges'])，将左上角单元格的值填充到合并矩形区域内的所有单元格
+    if (sheet && sheet['!merges'] && Array.isArray(sheet['!merges'])) {
+      sheet['!merges'].forEach((range: any) => {
+        const startCellRef = XLSX.utils.encode_cell(range.s)
+        const startCell = sheet[startCellRef]
+        if (!startCell) return
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          for (let C = range.s.c; C <= range.e.c; ++C) {
+            if (R === range.s.r && C === range.s.c) continue
+            const cellRef = XLSX.utils.encode_cell({ r: R, c: C })
+            sheet[cellRef] = { ...startCell }
+          }
+        }
+      })
+    }
+
     const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
 
     if (jsonData.length === 0) {
@@ -471,22 +488,50 @@ app.post('/api/ratecards/:name/import-preview', upload.single('file'), async (re
     }
 
     // 第一行作为原始表头（去除首尾空格和感叹号/问号修饰符）
-    const rawHeaders: string[] = (jsonData[0] || []).map(h => String(h || '').trim().replace(/^[!?]/, ''))
-    const headers = rawHeaders.filter(h => h.length > 0)
+    const rawHeaders: string[] = (jsonData[0] || []).map((h, idx) => {
+      const str = String(h ?? '').trim().replace(/^[!?]/, '')
+      return str || `未命名列_${idx + 1}`
+    })
+
+    // 去重处理：确保每个原始列头名称绝对唯一，防止 React 渲染 Key 冲突及错位
+    const headerCounts: Record<string, number> = {}
+    const headers: string[] = rawHeaders.map(h => {
+      if (!headerCounts[h]) {
+        headerCounts[h] = 1
+        return h
+      } else {
+        headerCounts[h]++
+        return `${h}_${headerCounts[h]}`
+      }
+    })
 
     const sampleRows: Record<string, string>[] = []
     const allRows: Record<string, string>[] = []
+
+    // 用于组名列向下继承填充 (Forward Fill)
+    const lastGroupValues: Record<number, string> = {}
 
     for (let i = 1; i < jsonData.length; i++) {
       const row = jsonData[i]
       if (!row || row.length === 0) continue
       const item: Record<string, string> = {}
       let hasVal = false
+
       headers.forEach((h, colIdx) => {
-        const val = String(row[colIdx] ?? '').trim()
-        if (val) hasVal = true
+        let val = String(row[colIdx] ?? '').trim()
+        
+        // 如果当前列值为空，且属于前面的组名列，尝试从上一行非空组名向下继承
+        if (!val && colIdx < 3 && lastGroupValues[colIdx]) {
+          val = lastGroupValues[colIdx]
+        }
+
+        if (val) {
+          hasVal = true
+          lastGroupValues[colIdx] = val
+        }
         item[h] = val
       })
+
       if (hasVal) {
         allRows.push(item)
         if (sampleRows.length < 5) sampleRows.push(item)
@@ -499,19 +544,23 @@ app.post('/api/ratecards/:name/import-preview', upload.single('file'), async (re
   }
 })
 
-// 最终确认映射导入保存定价表 JSON
+// 确认导入保存定价表 JSON（保存纯净的标准 columns 和 items 数据）
 app.post('/api/ratecards/:name/import', async (req, res) => {
   const { name } = req.params
   const { headers, items, mapping } = req.body
 
   if (!Array.isArray(items) || !mapping) {
-    return res.status(400).json({ detail: '缺少导入数据或映射配置' })
+    return res.status(400).json({ detail: '缺少导入数据或列映射配置' })
   }
 
   try {
-    // 确定被映射出来的目标列名集合
-    const usedPresetCols = Array.from(new Set(Object.values(mapping).filter((v: any) => Boolean(v)))) as string[]
+    // 过滤出被合法映射到 10 项内置标准列名的集合
+    const usedPresetCols = Array.from(new Set(Object.values(mapping).filter((v: any) => Boolean(v) && PRESET_COLUMNS.includes(v as any)))) as string[]
     const targetColumns = PRESET_COLUMNS.filter(col => usedPresetCols.includes(col))
+
+    if (targetColumns.length === 0) {
+      return res.status(400).json({ detail: '未选择任何有效的系统内置标准列映射' })
+    }
 
     const mappedItems: Record<string, string>[] = []
 
@@ -520,22 +569,21 @@ app.post('/api/ratecards/:name/import', async (req, res) => {
       let hasValue = false
 
       for (const [rawHeader, presetCol] of Object.entries(mapping)) {
-        if (presetCol && typeof presetCol === 'string') {
+        if (presetCol && typeof presetCol === 'string' && PRESET_COLUMNS.includes(presetCol as any)) {
           const val = String(rawItem[rawHeader] ?? '').trim()
           if (val) hasValue = true
           newItem[presetCol] = val
         }
       }
 
-      // 如果有有效字段且项目名称不为空，保留该行
-      if (hasValue && (newItem['项目名称'] || Object.keys(newItem).length > 0)) {
+      if (hasValue) {
         mappedItems.push(newItem)
       }
     }
 
     const filePath = path.join(RATECARD_DIR, `${name}.json`)
     const payload = {
-      columns: targetColumns.length > 0 ? targetColumns : PRESET_COLUMNS,
+      columns: targetColumns,
       items: mappedItems,
     }
 
