@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -186,8 +186,43 @@ export const DataTable: React.FC<DataTableProps> = ({
     updateColumnWidth(colName, autoWidth);
   }, [items, updateColumnWidth]);
 
+  // 计算所有列总宽度：给内层容器设定 minWidth，使 table 恰好不产生横向溢出，
+  // 横向滚动条仅由外层容器统一管理，始终固定在控件可视底部
+  const totalWidth = useMemo(() => {
+    let w = 0;
+    if (renderPrefixHeader) w += (columnWidths['匹配'] || 46);
+    if (showRowNumber) w += (columnWidths['#'] || 40);
+    columns.forEach((col) => {
+      const colName = typeof col === 'string' ? col : col.name;
+      w += (columnWidths[colName] || 120);
+    });
+    if (hasRowActions) w += 56; // 行操作列宽 w-14
+    return w;
+  }, [columnWidths, columns, renderPrefixHeader, showRowNumber, hasRowActions]);
+
   const showTopAddBtn = onAddRow && (addRowPosition === 'top' || addRowPosition === 'both');
   const showBottomAddBtn = onAddRow && (addRowPosition === 'bottom' || addRowPosition === 'both');
+
+  // 滚动容器 ref，用于挂载 Shift+滚轮横向滚动事件
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 挂载横向滚动监听：Shift+滚轮 → 横向偏移；放大 3× 避免滚动量过小
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.shiftKey) {
+        // Shift+滚轮转换为横向滚动
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+
+    // passive: false 是必须的，否则无法调用 preventDefault
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
 
   return (
     <div
@@ -216,137 +251,139 @@ export const DataTable: React.FC<DataTableProps> = ({
         </div>
       )}
 
-      {/* 内部 XY 双向独立滚动容器：最下端与控件底层边框完美接合 */}
-      <div className="flex-1 min-h-0 min-w-0 overflow-auto">
-        <Table className="border-collapse border-spacing-0 w-max min-w-full">
-          <TableHeader className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs shadow-xs border-b border-slate-200">
-            <TableRow className="hover:bg-transparent">
-              {/* 可选最左侧前缀表头（如 匹配 列） */}
-              {renderPrefixHeader && (
-                <TableHead
-                  data-col="匹配"
-                  style={{ width: columnWidths['匹配'] || 46, minWidth: columnWidths['匹配'] || 46 }}
-                  className="text-center font-medium text-slate-700 select-none py-2 px-1 border-r border-slate-200/80 bg-slate-100"
-                >
-                  {renderPrefixHeader()}
-                </TableHead>
-              )}
-
-              {/* 可选序号列 # */}
-              {showRowNumber && (
-                <TableHead
-                  data-col="#"
-                  style={{ width: columnWidths['#'] || 40, minWidth: columnWidths['#'] || 40 }}
-                  className="font-medium text-slate-700 select-none py-2 px-1 border-r border-slate-200/80 bg-slate-100 text-center"
-                >
-                  #
-                </TableHead>
-              )}
-
-              {/* 主列 Header */}
-              {columns.map((col) => {
-                const colName = typeof col === 'string' ? col : col.name;
-                const width = columnWidths[colName] || 120;
-                return (
+      {/* 单层滚动容器：overflow-auto 同时管 XY，两个滚动条均从外层固定高度边界产生。
+          纵向滚动条固定在视口右侧，横向滚动条固定在控件可视底部。 */}
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 min-w-0 overflow-auto">
+        {/* minWidth 直接设在 Table 上：使其撑宽外层触发横向滚动，无需额外包裹层 */}
+        <Table className="border-collapse border-spacing-0 w-full" style={{ minWidth: totalWidth }}>
+            <TableHeader className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs shadow-xs border-b border-slate-200">
+              <TableRow className="hover:bg-transparent">
+                {/* 可选最左侧前缀表头（如 匹配 列） */}
+                {renderPrefixHeader && (
                   <TableHead
-                    key={colName}
-                    data-col={colName}
-                    style={{ width, minWidth: width }}
-                    className="font-medium text-slate-700 whitespace-nowrap select-none py-2 px-2.5 relative group border-r border-slate-200/80 bg-slate-100"
-                  >
-                    <span className="truncate block">{colName}</span>
-                    {/* 0ms 原生拖拽 Resize 分隔线与双击 Auto-Fit */}
-                    <div
-                      className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-20 opacity-0 group-hover:opacity-100"
-                      onMouseDown={(e) => handleResizeStart(colName, e)}
-                      onDoubleClick={(e) => handleDoubleClickAutoFit(colName, e)}
-                      title="拖拽调节列宽，双击自适应最佳列宽"
-                    />
-                  </TableHead>
-                );
-              })}
-
-              {/* 行操作列 Header */}
-              {hasRowActions && (
-                <TableHead className="w-14 bg-slate-100 text-center font-medium text-slate-700 py-2 px-1 border-slate-200/80" />
-              )}
-            </TableRow>
-          </TableHeader>
-
-          <TableBody>
-            {items.map((item, i) => (
-              <TableRow key={i} className="hover:bg-slate-50/70 border-b border-slate-200/60">
-                {/* 最左侧单元格插槽 */}
-                {renderPrefixCell && (
-                  <TableCell
                     data-col="匹配"
                     style={{ width: columnWidths['匹配'] || 46, minWidth: columnWidths['匹配'] || 46 }}
-                    className="text-center p-1 border-r border-slate-200/50"
+                    className="text-center font-medium text-slate-700 select-none py-2 px-1 border-r border-slate-200/80 bg-slate-100"
                   >
-                    {renderPrefixCell(item, i)}
-                  </TableCell>
+                    {renderPrefixHeader()}
+                  </TableHead>
                 )}
 
-                {/* 序号列 # */}
+                {/* 可选序号列 # */}
                 {showRowNumber && (
-                  <TableCell
+                  <TableHead
                     data-col="#"
                     style={{ width: columnWidths['#'] || 40, minWidth: columnWidths['#'] || 40 }}
-                    className="text-xs text-slate-400 font-mono p-1 text-center border-r border-slate-200/50"
+                    className="font-medium text-slate-700 select-none py-2 px-1 border-r border-slate-200/80 bg-slate-100 text-center"
                   >
-                    {i + rowNumberStart}
-                  </TableCell>
+                    #
+                  </TableHead>
                 )}
 
-                {/* 各主列数据单元格 */}
+                {/* 主列 Header */}
                 {columns.map((col) => {
                   const colName = typeof col === 'string' ? col : col.name;
                   const width = columnWidths[colName] || 120;
                   return (
-                    <TableCell
+                    <TableHead
                       key={colName}
                       data-col={colName}
                       style={{ width, minWidth: width }}
-                      className="p-0 border-r border-slate-200/50 last:border-r-0"
+                      className="font-medium text-slate-700 whitespace-nowrap select-none py-2 px-2.5 relative group border-r border-slate-200/80 bg-slate-100"
                     >
-                      {renderCellContent(item, col, i, onEdit)}
-                    </TableCell>
+                      <span className="truncate block">{colName}</span>
+                      {/* 0ms 原生拖拽 Resize 分隔线与双击 Auto-Fit */}
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-20 opacity-0 group-hover:opacity-100"
+                        onMouseDown={(e) => handleResizeStart(colName, e)}
+                        onDoubleClick={(e) => handleDoubleClickAutoFit(colName, e)}
+                        title="拖拽调节列宽，双击自适应最佳列宽"
+                      />
+                    </TableHead>
                   );
                 })}
 
-                {/* 行快捷操作按钮（添加/删除） */}
+                {/* 行操作列 Header */}
                 {hasRowActions && (
-                  <TableCell className="whitespace-nowrap p-1.5 text-center">
-                    <div className="flex items-center justify-center gap-0.5">
-                      {onAddRow && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onAddRow(i)}
-                          className="h-7 w-7 text-gray-400 hover:text-green-600"
-                          title="在下方插入行"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {onDeleteRow && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onDeleteRow(i)}
-                          className="h-7 w-7 text-gray-400 hover:text-red-500"
-                          title="删除此行"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+                  <TableHead className="w-14 bg-slate-100 text-center font-medium text-slate-700 py-2 px-1 border-slate-200/80" />
                 )}
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+
+            <TableBody>
+              {items.map((item, i) => (
+                <TableRow key={i} className="hover:bg-slate-50/70 border-b border-slate-200/60">
+                  {/* 最左侧单元格插槽 */}
+                  {renderPrefixCell && (
+                    <TableCell
+                      data-col="匹配"
+                      style={{ width: columnWidths['匹配'] || 46, minWidth: columnWidths['匹配'] || 46 }}
+                      className="text-center p-1 border-r border-slate-200/50"
+                    >
+                      {renderPrefixCell(item, i)}
+                    </TableCell>
+                  )}
+
+                  {/* 序号列 # */}
+                  {showRowNumber && (
+                    <TableCell
+                      data-col="#"
+                      style={{ width: columnWidths['#'] || 40, minWidth: columnWidths['#'] || 40 }}
+                      className="text-xs text-slate-400 font-mono p-1 text-center border-r border-slate-200/50"
+                    >
+                      {i + rowNumberStart}
+                    </TableCell>
+                  )}
+
+                  {/* 各主列数据单元格 */}
+                  {columns.map((col) => {
+                    const colName = typeof col === 'string' ? col : col.name;
+                    const width = columnWidths[colName] || 120;
+                    return (
+                      <TableCell
+                        key={colName}
+                        data-col={colName}
+                        style={{ width, minWidth: width }}
+                        className="p-0 border-r border-slate-200/50 last:border-r-0"
+                      >
+                        {renderCellContent(item, col, i, onEdit)}
+                      </TableCell>
+                    );
+                  })}
+
+                  {/* 行快捷操作按钮（添加/删除） */}
+                  {hasRowActions && (
+                    <TableCell className="whitespace-nowrap p-1.5 text-center">
+                      <div className="flex items-center justify-center gap-0.5">
+                        {onAddRow && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onAddRow(i)}
+                            className="h-7 w-7 text-gray-400 hover:text-green-600"
+                            title="在下方插入行"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {onDeleteRow && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDeleteRow(i)}
+                            className="h-7 w-7 text-gray-400 hover:text-red-500"
+                            title="删除此行"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
         {items.length === 0 && (
           <div className="text-center py-10 text-gray-400 text-xs">
