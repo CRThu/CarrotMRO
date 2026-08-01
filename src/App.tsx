@@ -243,6 +243,56 @@ function App() {
     }
   };
 
+  // 报价单重命名
+  const handleQuotationRenameFile = async (oldFilename: string, newFilename: string) => {
+    if (!currentProject) return;
+    try {
+      const res = await api.renameQuotation(currentProject, oldFilename, newFilename);
+      const updatedFilename = res.data.file;
+      await fetchQuotationFiles(currentProject);
+      if (activeQuotationFilename === oldFilename) {
+        setActiveQuotationFilename(updatedFilename);
+      }
+    } catch (err: any) {
+      alert('重命名报价单失败: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // 定价表重命名
+  const handleRateCardRename = async (oldName: string, newName: string) => {
+    try {
+      const res = await api.renameRateCard(oldName, newName);
+      const updatedName = res.data.name;
+      await fetchRateCards();
+      if (currentRateCard === oldName) {
+        setCurrentRateCard(updatedName);
+      }
+      if (currentProject) {
+        await loadProjectInfo(currentProject);
+      }
+    } catch (err: any) {
+      alert('重命名定价表失败: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // 定价表删除
+  const handleRateCardDelete = async (name: string) => {
+    if (!confirm(`确定删除定价表 ${name} 吗？`)) return;
+    try {
+      await api.deleteRateCard(name);
+      await fetchRateCards();
+      if (currentRateCard === name) {
+        setCurrentRateCard(null);
+        setCurrentView(null);
+      }
+      if (currentProject) {
+        await loadProjectInfo(currentProject);
+      }
+    } catch (err: any) {
+      alert('删除定价表失败: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   const handleToggleSection = (section: string) => {
     setExpandedSections(prev => {
       const next = new Set(prev);
@@ -298,10 +348,13 @@ function App() {
         onToggleQuotation={(name) => setExpandedQuotation(expandedQuotation === name ? null : name)}
         onQuotationSelectFile={handleQuotationSelectFile}
         onQuotationDeleteFile={handleQuotationDeleteFile}
+        onQuotationRenameFile={handleQuotationRenameFile}
+        onRateCardRename={handleRateCardRename}
+        onRateCardDelete={handleRateCardDelete}
         onQuotationCreate={handleQuotationCreate}
       />
 
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-8 overflow-y-auto">
         {currentView === 'project_config' && currentProject && (
           <ProjectConfigWorkspace
             currentProject={currentProject}
@@ -323,6 +376,7 @@ function App() {
             projectRateCard={projectSettings.ratecard_name}
             projectTemplate={projectSettings.template_name}
             quotationColumns={projectSettings.quotation_columns}
+            matchValidationRules={projectSettings.match_validation_rules}
             onEdit={handleQuotationEdit}
             onAddRow={handleQuotationAddRow}
             onDeleteRow={handleQuotationDeleteRow}

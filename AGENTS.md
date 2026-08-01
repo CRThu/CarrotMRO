@@ -69,9 +69,17 @@ export const PRESET_COLUMNS = [
     "ratecard_name": "2026协议定价表.json",
     "template_name": "标准模板.xlsx",
     "ocr_columns": ["项目名称", "单位", "数量", "不含税单价", "说明"],
-    "quotation_columns": ["项目组", "项目名称", "单位", "数量", "不含税单价", "不含税总价", "税率", "含税单价", "含税总价", "说明"]
+    "quotation_columns": ["项目组", "项目名称", "单位", "数量", "不含税单价", "不含税总价", "税率", "含税单价", "含税总价", "说明"],
+    "match_validation_rules": {
+      "strict_name_match": true,
+      "check_columns": ["项目名称", "单位"],
+      "fill_columns": ["单位", "不含税单价", "含税单价", "税率", "说明"]
+    }
   }
   ```
+- **定价单匹配带入与输出前一键校验 (解耦流程)**:
+  - **匹配带入 (`fill_columns`)**: 在报价单中点击物料匹配时，仅将定价表中 `fill_columns` 中勾选的列覆盖带入报价单，并自动联动计算公式。
+  - **成品输出前一键校验 (`check_columns`)**: 在导出 Excel 或输出成品前，用户可点击顶部【校验】按钮，全表对比已匹配条目与原定价表数据。若发现 `check_columns` 中勾选的严格校验列被误修改，将在“识别提示与复核备注栏”集中提示警告。
 - **报价单创建**: 支持在项目下创建多个报价单 (`quotation-1.json`, `quotation-2.json` ...)。
 - **图片 OCR 识别导入**: 沉淀为报价单内部的核心导入功能。在报价单编辑页面直接上传图片，调用大模型按照项目配置的 `ocr_columns` 提取数据，并自动填充到当前报价单。后端支持 `stream: true` 真实打字流控制台推送、协议层 `response_format: { type: "json_object" }` 强制 JSON Mode 约束与 3 次指数退避自动重试机制。
 - **自动保存机制**:

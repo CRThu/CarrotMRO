@@ -49,12 +49,12 @@ describe('DataTable', () => {
   it('shows add row button when onAddRow provided', () => {
     const onAddRow = vi.fn()
     render(<DataTable columns={columns} items={items} onAddRow={onAddRow} />)
-    expect(screen.getByText('末尾新增行')).toBeInTheDocument()
+    expect(screen.getByText('新增数据行')).toBeInTheDocument()
   })
 
   it('does not show add row button when onAddRow not provided', () => {
     render(<DataTable columns={columns} items={items} />)
-    expect(screen.queryByText('末尾新增行')).not.toBeInTheDocument()
+    expect(screen.queryByText('新增数据行')).not.toBeInTheDocument()
   })
 
   it('renders empty table when items is empty', () => {
@@ -66,7 +66,7 @@ describe('DataTable', () => {
   it('calls onAddRow when add button clicked', () => {
     const onAddRow = vi.fn()
     render(<DataTable columns={columns} items={items} onAddRow={onAddRow} />)
-    screen.getByText('末尾新增行').click()
+    screen.getByText('新增数据行').click()
     expect(onAddRow).toHaveBeenCalled()
   })
 })

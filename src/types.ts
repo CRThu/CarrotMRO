@@ -14,6 +14,12 @@ export const PRESET_COLUMNS = [
 
 export type PresetColumnName = (typeof PRESET_COLUMNS)[number];
 
+export interface MatchValidationRules {
+  strict_name_match?: boolean;
+  check_columns: string[];
+  fill_columns?: string[];
+}
+
 export interface ProjectSettings {
   name: string;
   created_at: string;
@@ -21,6 +27,7 @@ export interface ProjectSettings {
   template_name: string | null;
   ocr_columns: string[];
   quotation_columns: string[];
+  match_validation_rules?: MatchValidationRules;
 }
 
 export type TableItem = Record<string, string>;
@@ -28,6 +35,7 @@ export type TableItem = Record<string, string>;
 export type QuotationItem = TableItem & {
   _matchStatus?: 'pending' | 'matched' | 'custom';
   '清单名称'?: string;
+  _matchedRateCardItem?: Record<string, string>;
 };
 
 export interface QuotationData {

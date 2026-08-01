@@ -22,6 +22,9 @@ interface SidebarProps {
   onToggleQuotation: (name: string) => void;
   onQuotationSelectFile: (filename: string) => void;
   onQuotationDeleteFile: (filename: string) => Promise<void>;
+  onQuotationRenameFile?: (oldFilename: string, newFilename: string) => Promise<void>;
+  onRateCardRename?: (oldName: string, newName: string) => Promise<void>;
+  onRateCardDelete?: (name: string) => Promise<void>;
   onQuotationCreate: () => Promise<void>;
 }
 
@@ -46,6 +49,9 @@ export function Sidebar({
   onToggleQuotation,
   onQuotationSelectFile,
   onQuotationDeleteFile,
+  onQuotationRenameFile,
+  onRateCardRename,
+  onRateCardDelete,
   onQuotationCreate,
 }: SidebarProps) {
   return (
@@ -99,6 +105,7 @@ export function Sidebar({
                     icon={<FileText size={14} />}
                     active={isCurrentProject && currentView === 'quotation' && activeQuotationFilename === f}
                     onClick={() => onQuotationSelectFile(f)}
+                    onRename={(newName) => onQuotationRenameFile?.(f, newName)}
                     onDelete={() => onQuotationDeleteFile(f)}
                   />
                 ))}
@@ -122,6 +129,8 @@ export function Sidebar({
             label={rc}
             active={currentRateCard === rc && currentView === 'ratecard'}
             onClick={() => onSelectRateCard(rc)}
+            onRename={(newName) => onRateCardRename?.(rc, newName)}
+            onDelete={() => onRateCardDelete?.(rc)}
           />
         ))}
       </SidebarSection>

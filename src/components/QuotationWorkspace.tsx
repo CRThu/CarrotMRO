@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MatchPopover } from '@/components/MatchPopover';
 import { OcrProgressModal } from '@/components/OcrProgressModal';
-import { QuotationItem } from '@/types';
+import { DataTable } from '@/components/DataTable';
+import { MatchValidationRules, QuotationItem, PRESET_COLUMNS } from '@/types';
 import * as api from '@/api';
-import { Save, Download, Plus, Trash2, Image, Loader2, Maximize2, HelpCircle, AlertCircle, MessageSquare } from 'lucide-react';
+import { Save, Download, Plus, Trash2, Image, Loader2, Maximize2, HelpCircle, AlertCircle, MessageSquare, ShieldCheck } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 
@@ -25,6 +26,7 @@ interface QuotationWorkspaceProps {
   projectRateCard: string | null;
   projectTemplate: string | null;
   quotationColumns: string[];
+  matchValidationRules?: MatchValidationRules;
   onEdit: (index: number, field: string, value: string) => void;
   onAddRow: (index?: number) => void;
   onDeleteRow: (index: number) => void;
@@ -66,11 +68,12 @@ export function calculateRowFormulas(item: Record<string, string>, changedField?
 export function QuotationWorkspace({
   currentProject,
   activeQuotationFilename,
-  quotationItems,
+  quotationItems = [],
   quotationRemarks = [],
   projectRateCard,
   projectTemplate,
-  quotationColumns,
+  quotationColumns = [],
+  matchValidationRules,
   onEdit,
   onAddRow,
   onDeleteRow,
@@ -79,6 +82,7 @@ export function QuotationWorkspace({
   onQuotationRemarksChange,
 }: QuotationWorkspaceProps) {
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
+  const columnsToShow = quotationColumns.length > 0 ? quotationColumns : (PRESET_COLUMNS as unknown as string[]);
 
   // 独立 OCR 多图识别状态日志弹窗 state
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -92,6 +96,8 @@ export function QuotationWorkspace({
 
   const [matchCandidatesMap, setMatchCandidatesMap] = useState<Record<number, MatchCandidate[]>>({});
   const [matchLoadingMap, setMatchLoadingMap] = useState<Record<number, boolean>>({});
+
+
 
   // 自动保存状态: 'saved' | 'saving' | 'error'
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
@@ -131,10 +137,6 @@ export function QuotationWorkspace({
     onQuotationRemarksChange?.(newRemarks);
     triggerAutoSave(quotationItems, newRemarks);
   };
-
-  const columnsToShow = quotationColumns && quotationColumns.length > 0
-    ? quotationColumns
-    : ['项目组', '项目名称', '单位', '数量', '不含税单价', '不含税总价', '税率', '含税单价', '含税总价', '说明'];
 
   const [ocrStreamText, setOcrStreamText] = useState('');
 
@@ -286,22 +288,102 @@ export function QuotationWorkspace({
   const handleSelectCandidate = (itemIndex: number, candidate: MatchCandidate) => {
     const item = quotationItems[itemIndex];
     const rcData = candidate.itemData || {};
+    const fillCols = matchValidationRules?.fill_columns ?? ['单位', '不含税单价', '含税单价', '税率', '说明'];
 
     const updatedItem: QuotationItem = {
       ...item,
       _matchStatus: 'matched' as const,
       '清单名称': candidate.name,
+      _matchedRateCardItem: candidate.itemData,
     };
 
-    if (rcData['不含税单价']) updatedItem['不含税单价'] = rcData['不含税单价'];
-    if (rcData['含税单价']) updatedItem['含税单价'] = rcData['含税单价'];
-    if (rcData['单位']) updatedItem['单位'] = rcData['单位'];
-    if (rcData['税率']) updatedItem['税率'] = rcData['税率'];
+    fillCols.forEach(col => {
+      if (col === '项目名称') {
+        if (rcData['项目名称']) {
+          updatedItem['项目名称'] = rcData['项目名称'];
+        }
+      } else if (rcData[col] !== undefined && rcData[col] !== '') {
+        updatedItem[col] = rcData[col];
+      }
+    });
 
     const finalItem = calculateRowFormulas(updatedItem);
     const newItems = [...quotationItems];
     newItems[itemIndex] = finalItem;
     handleItemsChange(newItems);
+  };
+
+  // 输出前【一键校验】：校验整张报价单的全量条目（未匹配状态警示 + 已匹配条目严格校验列比对）
+  const handleValidateQuotation = () => {
+    const checkCols =
+      matchValidationRules?.check_columns ??
+      (matchValidationRules?.strict_name_match !== false ? ['项目名称', '单位'] : ['单位']);
+    const warnings: string[] = [];
+    let unmatchedCount = 0;
+    let customCount = 0;
+    let modifiedCount = 0;
+
+    quotationItems.forEach((item, idx) => {
+      const rowNum = idx + 1;
+      const itemName = item['项目名称'] || item['清单名称'] || `第${rowNum}行`;
+
+      // 忽略空行
+      const hasContent = Object.keys(item).some(k => !k.startsWith('_') && String(item[k] || '').trim() !== '');
+      if (!hasContent) return;
+
+      const matchStatus = item._matchStatus || 'pending';
+
+      if (matchStatus === 'pending') {
+        unmatchedCount++;
+        warnings.push(`第 ${rowNum} 行 [${itemName}] ⚠️ 未匹配：尚未关联/匹配协议定价单物料`);
+      } else if (matchStatus === 'custom') {
+        customCount++;
+        warnings.push(`第 ${rowNum} 行 [${itemName}] ⚠️ 自定义非标件：已被手动标记为自定义不匹配项目`);
+      } else if (matchStatus === 'matched') {
+        const rc = item._matchedRateCardItem;
+        if (!rc) {
+          unmatchedCount++;
+          warnings.push(`第 ${rowNum} 行 [${itemName}] ⚠️ 缺失匹配快照：建议重新搜索选择定价物料`);
+          return;
+        }
+
+        checkCols.forEach(col => {
+          const curVal = String(item[col] || '').trim();
+          const origVal = String(rc[col] || '').trim();
+
+          if (col === '项目名称') {
+            const listName = String(item['清单名称'] || '').trim();
+            if (curVal && origVal && curVal !== origVal) {
+              modifiedCount++;
+              warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ 项目名称误修改：当前为 "${curVal}"，原定价单为 "${origVal}"`);
+            } else if (curVal && listName && curVal !== listName) {
+              modifiedCount++;
+              warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ 名称比对不符：报价单名称 ("${curVal}") 与协议清单名称 ("${listName}") 不一致`);
+            }
+          } else if (curVal && origVal && curVal !== origVal) {
+            modifiedCount++;
+            warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ ${col}误修改：当前为 "${curVal}"，原定价单为 "${origVal}"`);
+          }
+        });
+      }
+    });
+
+    const timestampStr = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+    if (warnings.length === 0) {
+      const successMsg = `[${timestampStr} 一键校验结果] ✓ 全表校验通过：所有 ${quotationItems.length} 条数据均已完成匹配，且严格校验列 (${checkCols.join('、')}) 与协议定价单完全一致。`;
+      const combined = Array.from(new Set([...quotationRemarks, successMsg]));
+      handleRemarksChange(combined);
+    } else {
+      const details: string[] = [];
+      if (unmatchedCount > 0) details.push(`${unmatchedCount} 条未匹配`);
+      if (customCount > 0) details.push(`${customCount} 条自定义非标件`);
+      if (modifiedCount > 0) details.push(`${modifiedCount} 处字段误修改`);
+
+      const summaryMsg = `[${timestampStr} 一键校验结果] 发现 ${warnings.length} 处校验提示 (${details.join('，')})：`;
+      const combined = Array.from(new Set([...quotationRemarks, summaryMsg, ...warnings]));
+      handleRemarksChange(combined);
+    }
   };
 
   const handleCellChange = (index: number, col: string, val: string) => {
@@ -368,6 +450,19 @@ export function QuotationWorkspace({
             OCR 导入
           </Button>
 
+          {projectRateCard && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleValidateQuotation}
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs"
+              title="一键校验全表已匹配物料的严格校验列是否与协议定价表保持一致"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 mr-1 text-indigo-600" />
+              一键校验
+            </Button>
+          )}
+
           {projectTemplate && (
             <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700 text-xs">
               <Download className="h-3.5 w-3.5 mr-1" />
@@ -396,183 +491,118 @@ export function QuotationWorkspace({
         </div>
       )}
 
-      {/* 报价单数据表格 */}
-      <Card className="shadow-sm">
-        <CardContent className="pt-4 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50/80">
-                <TableHead className="w-12 text-center">匹配</TableHead>
-                <TableHead className="w-10">#</TableHead>
-                {columnsToShow.map(col => (
-                  <TableHead key={col} className="font-medium text-gray-700 whitespace-nowrap">
-                    {col}
-                  </TableHead>
-                ))}
-                <TableHead className="w-16"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {quotationItems.map((item, i) => {
-                const matchStatus = item?._matchStatus || 'pending';
-                return (
-                  <TableRow key={i} className="hover:bg-gray-50/50">
-                    <TableCell className="text-center">
-                      {projectRateCard ? (
-                        <MatchPopover
-                          status={matchStatus}
-                          itemName={item?.['项目名称'] || ''}
-                          baseName={item?.['清单名称'] || ''}
-                          candidates={matchCandidatesMap[i] || []}
-                          loading={matchLoadingMap[i]}
-                          onOpen={() => fetchCandidatesForItem(i, item?.['项目名称'] || '')}
-                          onClose={() => setMatchCandidatesMap(prev => { const next = { ...prev }; delete next[i]; return next; })}
-                          onSelect={(c) => handleSelectCandidate(i, c)}
-                          onMarkCustom={() => {
-                            const newItems = [...quotationItems];
-                            newItems[i] = { ...item, _matchStatus: 'custom' };
-                            handleItemsChange(newItems);
-                          }}
-                        />
-                      ) : (
-                        <span className="text-gray-300">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-400 font-mono">{i + 1}</TableCell>
-                    {columnsToShow.map(col => (
-                      <TableCell key={col} className="p-1.5 min-w-[100px]">
-                        <Input
-                          value={item[col] ?? ''}
-                          onChange={(e) => handleCellChange(i, col, e.target.value)}
-                          className="h-8 text-sm focus-visible:ring-1"
-                        />
-                      </TableCell>
-                    ))}
-                    <TableCell className="whitespace-nowrap p-1.5">
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            onAddRow(i);
-                            const emptyRow: QuotationItem = { _matchStatus: 'pending' };
-                            const next = [...quotationItems];
-                            next.splice(i + 1, 0, emptyRow);
-                            handleItemsChange(next);
-                          }}
-                          className="h-7 w-7 text-gray-400 hover:text-green-600"
-                          title="插入下一行"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            onDeleteRow(i);
-                            const next = quotationItems.filter((_, idx) => idx !== i);
-                            handleItemsChange(next);
-                          }}
-                          className="h-7 w-7 text-gray-400 hover:text-red-500"
-                          title="删除当前行"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-
-          {quotationItems.length === 0 && (
-            <div className="text-center py-10 text-gray-400 text-xs">
-              暂无数据，点击上方“OCR 导入”或下方“新增行”开始填写
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onAddRow();
-                const emptyRow: QuotationItem = { _matchStatus: 'pending' };
-                const next = [...quotationItems, emptyRow];
-                handleItemsChange(next);
+      {/* 报价单数据表格组件（单控件大视野独立双向滚动） */}
+      <DataTable
+        height="calc(100vh - 260px)"
+        columns={columnsToShow}
+        items={quotationItems}
+        onEdit={handleCellChange}
+        onAddRow={(i) => {
+          onAddRow(i);
+          const emptyRow: QuotationItem = { _matchStatus: 'pending' };
+          const next = [...quotationItems];
+          if (typeof i === 'number') {
+            next.splice(i + 1, 0, emptyRow);
+          } else {
+            next.push(emptyRow);
+          }
+          handleItemsChange(next);
+        }}
+        onDeleteRow={(i) => {
+          onDeleteRow(i);
+          const next = quotationItems.filter((_, idx) => idx !== i);
+          handleItemsChange(next);
+        }}
+        showRowNumber={true}
+        renderPrefixHeader={() => '匹配'}
+        renderPrefixCell={(item, i) => (
+          projectRateCard ? (
+            <MatchPopover
+              status={item?._matchStatus || 'pending'}
+              itemName={item?.['项目名称'] || ''}
+              baseName={item?.['清单名称'] || ''}
+              candidates={matchCandidatesMap[i] || []}
+              loading={matchLoadingMap[i]}
+              onOpen={() => fetchCandidatesForItem(i, item?.['项目名称'] || '')}
+              onSearch={(query) => fetchCandidatesForItem(i, query)}
+              onClose={() => setMatchCandidatesMap(prev => { const next = { ...prev }; delete next[i]; return next; })}
+              onSelect={(c) => handleSelectCandidate(i, c)}
+              onMarkCustom={() => {
+                const newItems = [...quotationItems];
+                newItems[i] = { ...item, _matchStatus: 'custom' };
+                handleItemsChange(newItems);
               }}
-              className="text-xs text-gray-600 border-dashed"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              新增数据行
-            </Button>
-          </div>
+            />
+          ) : (
+            <span className="text-gray-300">-</span>
+          )
+        )}
+        emptyText="暂无数据，点击上方“OCR 导入”或下方“新增行”开始填写"
+        addRowText="新增数据行"
+      />
 
-          {/* 识别提示与复核备注栏 (跟随报价单 JSON 数据保存) */}
-          <div className="mt-6 border border-amber-200/80 bg-amber-50/50 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
-                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                <span>识别提示与复核备注</span>
-                <span className="text-[11px] font-normal text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-mono">
-                  {quotationRemarks.length} 条
+      {/* 识别提示与复核备注栏 (跟随报价单 JSON 数据保存) */}
+      <div className="border border-amber-200/80 bg-amber-50/50 rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>识别提示与复核备注</span>
+            <span className="text-[11px] font-normal text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full font-mono">
+              {quotationRemarks.length} 条
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const next = [...quotationRemarks, ''];
+              handleRemarksChange(next);
+            }}
+            className="h-7 text-xs text-amber-800 hover:text-amber-900 hover:bg-amber-100/60"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            添加复核备注
+          </Button>
+        </div>
+
+        {quotationRemarks.length === 0 ? (
+          <div className="text-xs text-amber-600/70 italic py-1">
+            暂无识别疑义或手动备注（OCR 识别时若发现字迹模糊或争议字段将在此处自动汇总）
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {quotationRemarks.map((remark, idx) => (
+              <div key={idx} className="flex items-center gap-2 bg-white/90 p-2 rounded-lg border border-amber-200/60 text-xs shadow-xs">
+                <span className="text-[11px] font-mono font-medium text-amber-600 bg-amber-100/70 px-1.5 py-0.5 rounded shrink-0 select-none">
+                  #{idx + 1}
                 </span>
+                <Input
+                  value={remark}
+                  onChange={(e) => {
+                    const next = [...quotationRemarks];
+                    next[idx] = e.target.value;
+                    handleRemarksChange(next);
+                  }}
+                  placeholder="编辑备注内容或疑义说明..."
+                  className="h-7 text-xs border-transparent hover:border-amber-200 focus:border-amber-400 focus:bg-white bg-transparent"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    const next = quotationRemarks.filter((_, i) => i !== idx);
+                    handleRemarksChange(next);
+                  }}
+                  className="h-7 w-7 text-amber-400 hover:text-red-500 hover:bg-red-50 shrink-0"
+                  title="删除此项备注"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const next = [...quotationRemarks, ''];
-                  handleRemarksChange(next);
-                }}
-                className="h-7 text-xs text-amber-800 hover:text-amber-900 hover:bg-amber-100/60"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                添加复核备注
-              </Button>
-            </div>
-
-            {quotationRemarks.length === 0 ? (
-              <div className="text-xs text-amber-600/70 italic py-1">
-                暂无识别疑义或手动备注（OCR 识别时若发现字迹模糊或争议字段将在此处自动汇总）
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {quotationRemarks.map((remark, idx) => (
-                  <div key={idx} className="flex items-center gap-2 bg-white/90 p-2 rounded-lg border border-amber-200/60 text-xs shadow-xs">
-                    <span className="text-[11px] font-mono font-medium text-amber-600 bg-amber-100/70 px-1.5 py-0.5 rounded shrink-0 select-none">
-                      #{idx + 1}
-                    </span>
-                    <Input
-                      value={remark}
-                      onChange={(e) => {
-                        const next = [...quotationRemarks];
-                        next[idx] = e.target.value;
-                        handleRemarksChange(next);
-                      }}
-                      placeholder="编辑备注内容或疑义说明..."
-                      className="h-7 text-xs border-transparent hover:border-amber-200 focus:border-amber-400 focus:bg-white bg-transparent"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        const next = quotationRemarks.filter((_, i) => i !== idx);
-                        handleRemarksChange(next);
-                      }}
-                      className="h-7 w-7 text-amber-400 hover:text-red-500 hover:bg-red-50 shrink-0"
-                      title="删除此项备注"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       {/* 独立 OCR 流式日志与步骤进度大尺寸终端窗口 */}
       <OcrProgressModal

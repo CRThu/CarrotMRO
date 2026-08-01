@@ -26,6 +26,8 @@ export const saveQuotationData = (projectName: string, filename: string, data: a
   axios.put<{ success: boolean }>(`/api/projects/${projectName}/quotations/${filename}`, data);
 export const deleteQuotation = (projectName: string, filename: string) =>
   axios.delete<{ success: boolean }>(`/api/projects/${projectName}/quotations/${filename}`);
+export const renameQuotation = (projectName: string, filename: string, newFilename: string) =>
+  axios.patch<{ success: boolean; file: string }>(`/api/projects/${projectName}/quotations/${filename}/rename`, { new_filename: newFilename });
 
 // ===== 图片 OCR 识别导入（沉淀为报价单内部的导入功能） =====
 export const uploadOcrFiles = (projectName: string, formData: FormData) =>
@@ -36,6 +38,10 @@ export const cancelTask = (taskId: string) => axios.delete(`/api/tasks/${taskId}
 // ===== 协议定价表相关 =====
 export const getRateCards = () => axios.get<string[]>('/api/ratecards');
 export const createRateCard = (name: string) => axios.post<{ success: boolean }>(`/api/ratecards/${name}`);
+export const renameRateCard = (oldName: string, newName: string) =>
+  axios.patch<{ success: boolean; name: string }>(`/api/ratecards/${oldName}/rename`, { new_name: newName });
+export const deleteRateCard = (name: string) =>
+  axios.delete<{ success: boolean }>(`/api/ratecards/${name}`);
 export const getRateCardData = (ratecardName: string) =>
   axios.get<{ columns: string[]; items: Record<string, string>[] }>(`/api/ratecards/${ratecardName}`);
 

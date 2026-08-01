@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ChevronRight, ChevronDown, Plus, Trash2, Folder, FolderOpen, FileText, Upload, ScanLine, Receipt, Settings } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, Trash2, Pencil, Folder, FolderOpen, FileText, Upload, ScanLine, Receipt, Settings } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface SidebarSectionProps {
@@ -86,6 +86,7 @@ interface TreeItemProps {
   active?: boolean;
   onClick?: () => void;
   onDelete?: () => void;
+  onRename?: (newName: string) => Promise<void> | void;
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
@@ -101,6 +102,7 @@ export function TreeItem({
   active,
   onClick,
   onDelete,
+  onRename,
   expandable,
   expanded,
   onToggleExpand,
@@ -111,6 +113,27 @@ export function TreeItem({
   icon,
 }: TreeItemProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(label);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleRenameSubmit = async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === label || submitting) {
+      setIsEditing(false);
+      setEditValue(label);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (onRename) {
+        await onRename(trimmed);
+      }
+    } finally {
+      setSubmitting(false);
+      setIsEditing(false);
+    }
+  };
 
   return (
     <div className="mb-1">
@@ -118,7 +141,7 @@ export function TreeItem({
         className={`group flex items-center gap-2 p-2 cursor-pointer rounded transition text-sm ${
           active ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
         }`}
-        onClick={expandable ? onToggleExpand : onClick}
+        onClick={isEditing ? undefined : (expandable ? onToggleExpand : onClick)}
       >
         {expandable && (
           <span className="flex-shrink-0">
@@ -126,8 +149,28 @@ export function TreeItem({
           </span>
         )}
         {icon && <span className="flex-shrink-0">{icon}</span>}
-        <span className="truncate flex-1">{label}</span>
-        {onUpload && (
+        {isEditing ? (
+          <input
+            autoFocus
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') handleRenameSubmit();
+              if (e.key === 'Escape') {
+                setIsEditing(false);
+                setEditValue(label);
+              }
+            }}
+            onBlur={handleRenameSubmit}
+            className="flex-1 px-1.5 py-0.5 bg-slate-900 border border-blue-400 text-white rounded text-xs focus:outline-none"
+          />
+        ) : (
+          <span className="truncate flex-1">{label}</span>
+        )}
+        {onUpload && !isEditing && (
           <>
             <input
               ref={fileInputRef}
@@ -153,7 +196,7 @@ export function TreeItem({
             </span>
           </>
         )}
-        {onCreate && (
+        {onCreate && !isEditing && (
           <span
             className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity select-none flex-shrink-0"
             title="新建"
@@ -165,7 +208,20 @@ export function TreeItem({
             <Plus size={14} />
           </span>
         )}
-        {onDelete && (
+        {onRename && !isEditing && (
+          <span
+            className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity select-none flex-shrink-0"
+            title="重命名"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditValue(label);
+              setIsEditing(true);
+            }}
+          >
+            <Pencil size={13} />
+          </span>
+        )}
+        {onDelete && !isEditing && (
           <span
             className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-300 transition-opacity select-none flex-shrink-0"
             title="删除"
@@ -177,7 +233,7 @@ export function TreeItem({
             <Trash2 size={14} />
           </span>
         )}
-        {onSettings && (
+        {onSettings && !isEditing && (
           <span
             className="text-slate-400 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity select-none flex-shrink-0"
             title="项目设置"

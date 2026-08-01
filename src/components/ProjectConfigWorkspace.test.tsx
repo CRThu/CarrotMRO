@@ -51,4 +51,34 @@ describe('ProjectConfigWorkspace Component', () => {
       expect(screen.getAllByText(col).length).toBeGreaterThan(0)
     })
   })
+
+  it('4. 点击“带入”与“校验”按钮触发 match_validation_rules 规则更新', () => {
+    render(<ProjectConfigWorkspace {...defaultProps} />)
+
+    // 寻找“带入”按钮并点击
+    const fillButtons = screen.getAllByRole('button', { name: /带入/ })
+    expect(fillButtons.length).toBe(10)
+    fireEvent.click(fillButtons[0]) // 点击第一列项目组的带入按钮
+
+    expect(defaultProps.onUpdateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        match_validation_rules: expect.objectContaining({
+          fill_columns: expect.arrayContaining(['项目组']),
+        }),
+      })
+    )
+
+    // 寻找“校验”按钮并点击
+    const checkButtons = screen.getAllByRole('button', { name: /校验/ })
+    expect(checkButtons.length).toBe(10)
+    fireEvent.click(checkButtons[0]) // 点击第一列项目组的校验按钮
+
+    expect(defaultProps.onUpdateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        match_validation_rules: expect.objectContaining({
+          check_columns: expect.arrayContaining(['项目组']),
+        }),
+      })
+    )
+  })
 })

@@ -159,14 +159,13 @@ export function RateCardWorkspace({
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
-        <CardContent className="pt-6">
-          <DataTable
-            columns={ratecardTableData?.columns ?? []}
-            items={ratecardTableData?.items ?? []}
-          />
-        </CardContent>
-      </Card>
+      <DataTable
+        height="calc(100vh - 260px)"
+        columns={ratecardTableData?.columns ?? []}
+        items={ratecardTableData?.items ?? []}
+        showRowNumber={true}
+        emptyText="协议定价表无数据，请导入 Excel / CSV"
+      />
 
       {/* 导入模态框：精确全等匹配 + 丰富示例数据 + 实时手动调整与校验 Banner */}
       {previewData && (

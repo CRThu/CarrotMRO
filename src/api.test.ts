@@ -77,6 +77,24 @@ describe('API', () => {
       await api.importRateCardFile('rc1', payload)
       expect(mockPost).toHaveBeenCalledWith('/api/ratecards/rc1/import', payload)
     })
+
+    it('renameQuotation calls PATCH /api/projects/{name}/quotations/{file}/rename', async () => {
+      mockPatch.mockResolvedValue({ data: { success: true, file: 'new-q.json' } })
+      await api.renameQuotation('test-project', 'q1.json', 'new-q.json')
+      expect(mockPatch).toHaveBeenCalledWith('/api/projects/test-project/quotations/q1.json/rename', { new_filename: 'new-q.json' })
+    })
+
+    it('renameRateCard calls PATCH /api/ratecards/{name}/rename', async () => {
+      mockPatch.mockResolvedValue({ data: { success: true, name: 'new-rc' } })
+      await api.renameRateCard('old-rc', 'new-rc')
+      expect(mockPatch).toHaveBeenCalledWith('/api/ratecards/old-rc/rename', { new_name: 'new-rc' })
+    })
+
+    it('deleteRateCard calls DELETE /api/ratecards/{name}', async () => {
+      mockDelete.mockResolvedValue({ data: { success: true } })
+      await api.deleteRateCard('old-rc')
+      expect(mockDelete).toHaveBeenCalledWith('/api/ratecards/old-rc')
+    })
   })
 
   describe('System Settings and LLM aliases', () => {

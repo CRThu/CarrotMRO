@@ -107,4 +107,86 @@ describe('QuotationWorkspace & Formulas', () => {
       expect.objectContaining({ '项目名称': '新物料' }),
     ])
   })
+
+  it('7. 点击【一键校验】按钮能正确比对全表条目（包含未匹配行警示与已匹配物料误改动列）并写入复核备注', () => {
+    const onRemarksChange = vi.fn()
+    const mockProps = {
+      currentProject: '项目A',
+      activeQuotationFilename: 'quotation-1.json',
+      quotationItems: [
+        {
+          _matchStatus: 'matched' as const,
+          '项目名称': '铜芯电缆',
+          '单位': '个', // 被用户误改为了 个
+          _matchedRateCardItem: { '项目名称': '铜芯电缆', '单位': '米' }, // 原定价单为 米
+        },
+        {
+          _matchStatus: 'pending' as const,
+          '项目名称': '地面打磨',
+          '单位': '平方米',
+        },
+      ],
+      quotationRemarks: [],
+      projectRateCard: '协议表A.json',
+      projectTemplate: '模板A.xlsx',
+      quotationColumns: ['项目名称', '单位'],
+      matchValidationRules: {
+        strict_name_match: true,
+        check_columns: ['项目名称', '单位'],
+        fill_columns: ['单位'],
+      },
+      onEdit: vi.fn(),
+      onAddRow: vi.fn(),
+      onDeleteRow: vi.fn(),
+      onSave: vi.fn(),
+      onQuotationDataChange: vi.fn(),
+      onQuotationRemarksChange: onRemarksChange,
+    }
+
+    render(<QuotationWorkspace {...mockProps} />)
+
+    const validateBtn = screen.getByRole('button', { name: /一键校验/ })
+    expect(validateBtn).toBeInTheDocument()
+
+    fireEvent.click(validateBtn)
+
+    expect(onRemarksChange).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.stringContaining('单位误修改：当前为 "个"，原定价单为 "米"'),
+        expect.stringContaining('第 2 行 [地面打磨] ⚠️ 未匹配：尚未关联/匹配协议定价单物料'),
+      ])
+    )
+  })
+
+  it('8. 匹配弹窗支持搜索框交互与自定义关键字检索', () => {
+    const mockProps = {
+      currentProject: '项目A',
+      activeQuotationFilename: 'quotation-1.json',
+      quotationItems: [{ '项目名称': '拆除地毯', '单位': '平方米' }],
+      projectRateCard: '协议表A.json',
+      projectTemplate: null,
+      quotationColumns: ['项目名称', '单位'],
+      onEdit: vi.fn(),
+      onAddRow: vi.fn(),
+      onDeleteRow: vi.fn(),
+      onSave: vi.fn(),
+      onQuotationDataChange: vi.fn(),
+    }
+
+    render(<QuotationWorkspace {...mockProps} />)
+
+    // 点击匹配按钮触发弹窗
+    const matchBtn = screen.getByTitle('点击打开物料匹配与搜索')
+    fireEvent.click(matchBtn)
+
+    // 确认弹窗渲染搜索框且默认显示 '拆除地毯'
+    const searchInput = screen.getByPlaceholderText('输入关键字检索协议定价库物料...') as HTMLInputElement
+    expect(searchInput).toBeInTheDocument()
+    expect(searchInput.value).toBe('拆除地毯')
+
+    // 修改搜索框内容为 '地毯' 并回车触发搜索
+    fireEvent.change(searchInput, { target: { value: '地毯' } })
+    expect(searchInput.value).toBe('地毯')
+    fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' })
+  })
 })

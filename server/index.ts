@@ -120,6 +120,11 @@ app.post('/api/projects/:name', async (req, res) => {
       template_name: null,
       ocr_columns: ['项目名称', '单位', '数量', '不含税单价', '说明'],
       quotation_columns: PRESET_COLUMNS,
+      match_validation_rules: {
+        strict_name_match: true,
+        check_columns: ['项目名称', '单位'],
+        fill_columns: ['单位', '不含税单价', '含税单价', '税率', '说明'],
+      },
     }
     await fs.writeFile(settingsPath, JSON.stringify(settingsData, null, 2), 'utf-8')
     res.json({ success: true, name })
@@ -140,6 +145,11 @@ app.get('/api/projects/:name', async (req, res) => {
     template_name: null as string | null,
     ocr_columns: ['项目名称', '单位', '数量', '不含税单价', '说明'],
     quotation_columns: PRESET_COLUMNS,
+    match_validation_rules: {
+      strict_name_match: true,
+      check_columns: ['项目名称', '单位'],
+      fill_columns: ['单位', '不含税单价', '含税单价', '税率', '说明'],
+    },
   }
 
   try {
@@ -298,6 +308,34 @@ app.delete('/api/projects/:name/quotations/:file', async (req, res) => {
   }
 })
 
+app.patch('/api/projects/:name/quotations/:file/rename', async (req, res) => {
+  const { name, file } = req.params
+  let { new_filename } = req.body
+  if (!new_filename || typeof new_filename !== 'string') {
+    return res.status(400).json({ detail: '新报价单文件名不能为空' })
+  }
+  new_filename = new_filename.trim()
+  if (!new_filename.endsWith('.json')) {
+    new_filename = `${new_filename}.json`
+  }
+  const safeNewFile = path.basename(new_filename)
+  const oldPath = path.join(PROJECTS_DIR, name, file)
+  const newPath = path.join(PROJECTS_DIR, name, safeNewFile)
+
+  try {
+    if (!fsSync.existsSync(oldPath)) {
+      return res.status(404).json({ detail: '原报价单文件不存在' })
+    }
+    if (oldPath !== newPath && fsSync.existsSync(newPath)) {
+      return res.status(400).json({ detail: '已存在同名的报价单文件' })
+    }
+    await fs.rename(oldPath, newPath)
+    res.json({ success: true, file: safeNewFile })
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message })
+  }
+})
+
 // ===== OCR 多图图片异步识别与流式日志通知 API =====
 app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
   const { name } = req.params
@@ -450,6 +488,66 @@ app.get('/api/ratecards/:name', async (req, res) => {
     res.json(JSON.parse(content))
   } catch {
     res.json({ columns: PRESET_COLUMNS, items: [] })
+  }
+})
+
+app.patch('/api/ratecards/:name/rename', async (req, res) => {
+  const { name } = req.params
+  let { new_name } = req.body
+  if (!new_name || typeof new_name !== 'string') {
+    return res.status(400).json({ detail: '新定价表名称不能为空' })
+  }
+  new_name = new_name.trim().replace(/\.json$/, '')
+  const oldPath = path.join(RATECARD_DIR, `${name}.json`)
+  const newPath = path.join(RATECARD_DIR, `${new_name}.json`)
+
+  try {
+    if (!fsSync.existsSync(oldPath)) {
+      return res.status(404).json({ detail: '原定价表不存在' })
+    }
+    if (name !== new_name && fsSync.existsSync(newPath)) {
+      return res.status(400).json({ detail: '已存在同名的定价表' })
+    }
+    await fs.rename(oldPath, newPath)
+
+    // 自动更新所有项目 settings.json 中引用的 ratecard_name
+    try {
+      const projEntries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true })
+      for (const entry of projEntries) {
+        if (entry.isDirectory()) {
+          const sPath = path.join(PROJECTS_DIR, entry.name, 'settings.json')
+          if (fsSync.existsSync(sPath)) {
+            const sContent = await fs.readFile(sPath, 'utf-8')
+            const projSettings = JSON.parse(sContent)
+            if (
+              projSettings.ratecard_name === `${name}.json` ||
+              projSettings.ratecard_name === name
+            ) {
+              projSettings.ratecard_name = `${new_name}.json`
+              await fs.writeFile(sPath, JSON.stringify(projSettings, null, 2), 'utf-8')
+            }
+          }
+        }
+      }
+    } catch {}
+
+    res.json({ success: true, name: new_name })
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message })
+  }
+})
+
+app.delete('/api/ratecards/:name', async (req, res) => {
+  const { name } = req.params
+  const cleanName = name.replace(/\.json$/, '')
+  const filePath = path.join(RATECARD_DIR, `${cleanName}.json`)
+  try {
+    if (fsSync.existsSync(filePath)) {
+      await fs.unlink(filePath)
+    }
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message })
   }
 })
 

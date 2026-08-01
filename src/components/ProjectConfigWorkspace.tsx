@@ -193,6 +193,121 @@ export function ProjectConfigWorkspace({
           </div>
         </CardContent>
       </Card>
+
+      {/* 定价匹配与校验规则设置 */}
+      <Card className="shadow-sm">
+        <CardHeader className="py-4">
+          <CardTitle className="text-base font-medium flex items-center justify-between">
+            <span>定价单匹配带入与严格校验规则</span>
+            <div className="flex items-center gap-4 text-xs font-normal text-gray-500">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-blue-500 inline-block"></span> 匹配带入 (
+                {
+                  (settings.match_validation_rules?.fill_columns ?? ['单位', '不含税单价', '含税单价', '税率', '说明']).length
+                }
+                )
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-purple-500 inline-block"></span> 严格校验 (
+                {
+                  (
+                    settings.match_validation_rules?.check_columns ??
+                    (settings.match_validation_rules?.strict_name_match !== false ? ['项目名称', '单位'] : ['单位'])
+                  ).length
+                }
+                )
+              </span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 text-xs text-gray-600 space-y-1">
+            <p className="font-semibold text-blue-900 flex items-center gap-1.5">
+              <span>💡 功能区别说明</span>
+            </p>
+            <p>1. <strong>匹配带入 (📥)</strong>：在报价单中搜索并选择协议物料时，将选中的字段自动填充到报价单中并自动联动计算单价与总价。</p>
+            <p>2. <strong>严格校验 (🔍)</strong>：在成品输出前点击顶部【校验】按钮时，对比报价单当前数值与协议定价表，防止关键校验列被误修改。</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+            {PRESET_COLUMNS.map(col => {
+              const currentRules = settings.match_validation_rules || {
+                strict_name_match: true,
+                check_columns: ['项目名称', '单位'],
+                fill_columns: ['单位', '不含税单价', '含税单价', '税率', '说明'],
+              };
+              const checkCols =
+                currentRules.check_columns ??
+                (currentRules.strict_name_match !== false ? ['项目名称', '单位'] : ['单位']);
+              const fillCols = currentRules.fill_columns ?? ['单位', '不含税单价', '含税单价', '税率', '说明'];
+
+              const isFill = fillCols.includes(col);
+              const isCheck = checkCols.includes(col);
+
+              const toggleFill = () => {
+                const nextFill = isFill ? fillCols.filter(c => c !== col) : [...fillCols, col];
+                onUpdateSettings({
+                  match_validation_rules: {
+                    ...currentRules,
+                    strict_name_match: checkCols.includes('项目名称'),
+                    check_columns: checkCols,
+                    fill_columns: nextFill,
+                  },
+                });
+              };
+
+              const toggleCheck = () => {
+                const nextCheck = isCheck ? checkCols.filter(c => c !== col) : [...checkCols, col];
+                onUpdateSettings({
+                  match_validation_rules: {
+                    ...currentRules,
+                    strict_name_match: nextCheck.includes('项目名称'),
+                    check_columns: nextCheck,
+                    fill_columns: fillCols,
+                  },
+                });
+              };
+
+              return (
+                <div key={col} className="p-2.5 rounded-lg border border-gray-200 bg-white shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-800">{col}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={toggleFill}
+                      className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                        isFill
+                          ? 'bg-blue-50 border border-blue-400 text-blue-700'
+                          : 'bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100'
+                      }`}
+                      title={`${col} - 匹配时自动填充带入`}
+                    >
+                      {isFill ? <CheckSquare className="h-3 w-3 text-blue-600" /> : <Square className="h-3 w-3 text-gray-400" />}
+                      <span>带入</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleCheck}
+                      className={`flex items-center justify-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                        isCheck
+                          ? 'bg-purple-50 border border-purple-400 text-purple-700'
+                          : 'bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100'
+                      }`}
+                      title={`${col} - 输出前一键校验检查误改动`}
+                    >
+                      {isCheck ? <CheckSquare className="h-3 w-3 text-purple-600" /> : <Square className="h-3 w-3 text-gray-400" />}
+                      <span>校验</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
