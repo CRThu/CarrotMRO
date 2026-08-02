@@ -1,9 +1,12 @@
 name: Publish Package
 
 on:
+  release:
+    types: [published]
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -28,4 +31,12 @@ jobs:
       - run: bun run test
       - run: bun run build
       - run: npm install -g npm@latest
-      - run: npm publish --access public --tag alpha
+      - name: Publish to NPM
+        run: |
+          if [[ "${{ github.ref_name }}" == *-* ]]; then
+            echo "检测到预发布 Tag (${{ github.ref_name }})，使用 --tag alpha 发布..."
+            npm publish --access public --tag alpha
+          else
+            echo "检测到正式 Release Tag (${{ github.ref_name }})，发布到 latest 稳定频道..."
+            npm publish --access public
+          fi
