@@ -1,8 +1,12 @@
 {
   "name": "carrotmro",
-  "version": "2.0.0-alpha.6",
+  "version": "2.0.0-alpha.7",
   "description": "CarrotMRO 综合管理系统",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CRThu/CarrotMRO.git"
+  },
   "keywords": [
     "carrotmro",
     "mro"

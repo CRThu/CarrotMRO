@@ -28,7 +28,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -47,6 +46,5 @@ jobs:
             npm publish --access public
           else
             echo "使用 GitHub OIDC 免密凭据发布..."
-            rm -f ~/.npmrc /home/runner/work/_temp/.npmrc
-            npm publish --access public --provenance
+            npm publish --provenance --access public
           fi
