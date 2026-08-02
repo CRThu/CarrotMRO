@@ -50,9 +50,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
 };
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+export function getDataDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data')
+  }
+  const execName = path.basename(process.execPath).toLowerCase()
+  const isPackagedExe = !execName.includes('electron') && !execName.includes('node') && !execName.includes('bun')
+  const baseDir = isPackagedExe ? path.dirname(process.execPath) : process.cwd()
+  return path.join(baseDir, 'data')
+}
+
 export function getSettingsFilePath(): string {
-  return process.env.SETTINGS_FILE_PATH || path.join(DATA_DIR, 'settings.json');
+  return process.env.SETTINGS_FILE_PATH || path.join(getDataDir(), 'settings.json');
 }
 
 
@@ -80,7 +89,7 @@ function parseSettings(parsed: any): AppSettings {
  */
 export async function loadSettings(): Promise<AppSettings> {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(getDataDir(), { recursive: true });
     if (fsSync.existsSync(getSettingsFilePath())) {
       const content = await fs.readFile(getSettingsFilePath(), 'utf-8');
       cachedSettings = parseSettings(JSON.parse(content));
@@ -145,7 +154,7 @@ export async function saveSettings(newSettings: Partial<AppSettings>): Promise<A
     },
   };
 
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(getDataDir(), { recursive: true });
   await fs.writeFile(getSettingsFilePath(), JSON.stringify(updated, null, 2), 'utf-8');
   cachedSettings = updated;
   return updated;

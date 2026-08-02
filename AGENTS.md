@@ -7,7 +7,7 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 本系统采用全栈 TypeScript 架构，支持单文件 `.exe` 发布与桌面/网页双模式运行：
 - **后端 (Server)**: 基于 Node.js / Express 构建，运行于桌面主进程，提供 RESTful API 接口，数据管理采用本地纯 JSON 文件存储 (`data/`)。
 - **前端 (Frontend)**: 基于 React 19 + Vite 6 + Tailwind CSS v4 构建，采用树形侧边栏导航 + 右侧工作区布局。
-- **运行/桌面壳**: 支持 **Bun Compile 超高速单文件打包** (`bun run package:exe`) 或 **Electron 原生 GUI 桌面应用模式** (`bun run dev:electron`)，端口 3000 天然开放供系统浏览器随时访问。
+- **运行/桌面壳**: 支持 **Electron 原生 GUI 桌面应用单文件打包** (`bun run package:exe` 借助 `electron-builder` 生成 Portable .exe)，以及 **CLI/NPM 模块** (`bin/cli.js` 支持 `npx carrotmro`)。端口 3000 天然开放供系统浏览器与桌面窗口调用。
 
 ## 目录结构
 
@@ -29,7 +29,10 @@ CarrotMRO 是一个 MRO（维护、维修、运营）综合管理系统，包含
 ├── server/             # 后端 Node.js API 服务
 │   └── index.ts        # Express RESTful API 路由与 Excel/CSV 解析对齐
 ├── electron/           # Electron 桌面应用壳
-│   └── main.ts         # 原生 GUI 桌面窗口主进程
+│   └── main.ts         # 原生 GUI 桌面窗口主进程（处理 ESM 模块转换与 did-fail-load 重试）
+├── electron-builder.json # Electron 桌面单文件打包配置文件
+├── .github/workflows/  # CI/CD 自动化构建与 NPM/OIDC 发布工作流
+│   └── publish.yml
 ├── data/               # 本地 JSON 数据与 Excel 模板存储
 │   ├── projects/       # 项目数据目录：{项目名称}/settings.json 与 quotation-*.json
 │   ├── ratecard/       # 协议定价表 JSON 文件

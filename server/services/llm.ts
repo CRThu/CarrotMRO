@@ -6,7 +6,8 @@
  */
 
 import axios, { AxiosRequestConfig } from 'axios';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import * as HttpsProxyAgentModule from 'https-proxy-agent';
+const HttpsProxyAgent: any = (HttpsProxyAgentModule as any).HttpsProxyAgent || (HttpsProxyAgentModule as any).default || HttpsProxyAgentModule;
 import { getActiveProviderConfig, ProviderConfig } from './settings.js';
 
 export interface ImageInput {

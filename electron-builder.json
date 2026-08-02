@@ -1,0 +1,24 @@
+{
+  "appId": "com.carrotmro.app",
+  "productName": "CarrotMRO",
+  "directories": {
+    "output": "release"
+  },
+  "compression": "store",
+  "files": [
+    "dist/**/*",
+    "bin/**/*",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "portable": {
+    "artifactName": "CarrotMRO-Portable-${version}.${ext}"
+  }
+}

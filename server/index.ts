@@ -7,7 +7,7 @@ import fsSync from 'fs'
 import open from 'open'
 import multer from 'multer'
 import * as XLSX from 'xlsx'
-import { loadSettings, getSettings, saveSettings } from './services/settings.js'
+import { getDataDir, loadSettings, getSettings, saveSettings } from './services/settings.js'
 import { runOcrWithLlm, testLlmConnection, ImageInput } from './services/llm.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -20,12 +20,6 @@ const upload = multer({ storage: multer.memoryStorage() })
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 
-// 数据目录（支持本地 JSON 文件管理）
-const DATA_DIR = path.join(process.cwd(), 'data')
-const PROJECTS_DIR = path.join(DATA_DIR, 'projects')
-const RATECARD_DIR = path.join(DATA_DIR, 'ratecard')
-const TEMPLATE_DIR = path.join(DATA_DIR, 'template')
-
 // 内存中的任务状态缓存
 const tasks: Record<
   string,
@@ -37,22 +31,29 @@ const tasks: Record<
     columns?: string[]
     result?: any
     message?: string
+    streamText?: string
   }
 > = {}
 
+export function getProjectsDir() { return path.join(getDataDir(), 'projects') }
+export function getRatecardDir() { return path.join(getDataDir(), 'ratecard') }
+export function getTemplateDir() { return path.join(getDataDir(), 'template') }
+
 // 初始化数据目录与自动加载持久化配置
-async function initDirs() {
+export async function initDirs() {
+  const projectsDir = getProjectsDir()
+  const ratecardDir = getRatecardDir()
+  const templateDir = getTemplateDir()
   try {
-    await fs.mkdir(PROJECTS_DIR, { recursive: true })
-    await fs.mkdir(RATECARD_DIR, { recursive: true })
-    await fs.mkdir(TEMPLATE_DIR, { recursive: true })
+    await fs.mkdir(projectsDir, { recursive: true })
+    await fs.mkdir(ratecardDir, { recursive: true })
+    await fs.mkdir(templateDir, { recursive: true })
     await loadSettings()
-    console.log('数据目录及 settings.json 成功自动加载！')
+    console.log(`数据目录 [${getDataDir()}] 及 settings.json 成功自动加载！`)
   } catch (err) {
     console.error('初始化数据目录/设置失败:', err)
   }
 }
-initDirs()
 
 // 全局 10 项标准预制列
 const PRESET_COLUMNS = [
@@ -99,7 +100,7 @@ app.get('/api/preset-columns', (req, res) => {
 // ===== 项目及 Settings API =====
 app.get('/api/projects', async (req, res) => {
   try {
-    const entries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true })
+    const entries = await fs.readdir(getProjectsDir(), { withFileTypes: true })
     const projectNames = entries.filter(e => e.isDirectory()).map(e => e.name)
     res.json(projectNames)
   } catch (err) {
@@ -109,7 +110,7 @@ app.get('/api/projects', async (req, res) => {
 
 app.post('/api/projects/:name', async (req, res) => {
   const { name } = req.params
-  const projPath = path.join(PROJECTS_DIR, name)
+  const projPath = path.join(getProjectsDir(), name)
   try {
     await fs.mkdir(projPath, { recursive: true })
     const settingsPath = path.join(projPath, 'settings.json')
@@ -135,8 +136,8 @@ app.post('/api/projects/:name', async (req, res) => {
 
 app.get('/api/projects/:name', async (req, res) => {
   const { name } = req.params
-  const settingsPath = path.join(PROJECTS_DIR, name, 'settings.json')
-  const legacyConfigPath = path.join(PROJECTS_DIR, name, 'project.json')
+  const settingsPath = path.join(getProjectsDir(), name, 'settings.json')
+  const legacyConfigPath = path.join(getProjectsDir(), name, 'project.json')
 
   let settings = {
     name,
@@ -166,7 +167,7 @@ app.get('/api/projects/:name', async (req, res) => {
       }
       await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
     } else {
-      await fs.mkdir(path.join(PROJECTS_DIR, name), { recursive: true })
+      await fs.mkdir(path.join(getProjectsDir(), name), { recursive: true })
       await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8')
     }
   } catch {}
@@ -176,7 +177,7 @@ app.get('/api/projects/:name', async (req, res) => {
 
 app.patch('/api/projects/:name/settings', async (req, res) => {
   const { name } = req.params
-  const projPath = path.join(PROJECTS_DIR, name)
+  const projPath = path.join(getProjectsDir(), name)
   const settingsPath = path.join(projPath, 'settings.json')
   try {
     await fs.mkdir(projPath, { recursive: true })
@@ -203,7 +204,7 @@ app.patch('/api/projects/:name/settings', async (req, res) => {
 app.patch('/api/projects/:name/ratecard', async (req, res) => {
   const { name } = req.params
   const { ratecard_name } = req.body
-  const settingsPath = path.join(PROJECTS_DIR, name, 'settings.json')
+  const settingsPath = path.join(getProjectsDir(), name, 'settings.json')
   try {
     let settings: any = {}
     if (fsSync.existsSync(settingsPath)) {
@@ -220,7 +221,7 @@ app.patch('/api/projects/:name/ratecard', async (req, res) => {
 app.patch('/api/projects/:name/template', async (req, res) => {
   const { name } = req.params
   const { template_name } = req.body
-  const settingsPath = path.join(PROJECTS_DIR, name, 'settings.json')
+  const settingsPath = path.join(getProjectsDir(), name, 'settings.json')
   try {
     let settings: any = {}
     if (fsSync.existsSync(settingsPath)) {
@@ -237,7 +238,7 @@ app.patch('/api/projects/:name/template', async (req, res) => {
 // ===== 报价单 API (quotation-*.json) =====
 app.get('/api/projects/:name/quotations', async (req, res) => {
   const { name } = req.params
-  const projPath = path.join(PROJECTS_DIR, name)
+  const projPath = path.join(getProjectsDir(), name)
   try {
     await fs.mkdir(projPath, { recursive: true })
     const files = await fs.readdir(projPath)
@@ -250,7 +251,7 @@ app.get('/api/projects/:name/quotations', async (req, res) => {
 
 app.post('/api/projects/:name/quotations', async (req, res) => {
   const { name } = req.params
-  const projPath = path.join(PROJECTS_DIR, name)
+  const projPath = path.join(getProjectsDir(), name)
   try {
     await fs.mkdir(projPath, { recursive: true })
     const files = await fs.readdir(projPath)
@@ -273,7 +274,7 @@ app.post('/api/projects/:name/quotations', async (req, res) => {
 
 app.get('/api/projects/:name/quotations/:file', async (req, res) => {
   const { name, file } = req.params
-  const filePath = path.join(PROJECTS_DIR, name, file)
+  const filePath = path.join(getProjectsDir(), name, file)
   try {
     const content = await fs.readFile(filePath, 'utf-8')
     res.json(JSON.parse(content))
@@ -284,7 +285,7 @@ app.get('/api/projects/:name/quotations/:file', async (req, res) => {
 
 app.put('/api/projects/:name/quotations/:file', async (req, res) => {
   const { name, file } = req.params
-  const filePath = path.join(PROJECTS_DIR, name, file)
+  const filePath = path.join(getProjectsDir(), name, file)
   try {
     const payload = {
       ...req.body,
@@ -299,7 +300,7 @@ app.put('/api/projects/:name/quotations/:file', async (req, res) => {
 
 app.delete('/api/projects/:name/quotations/:file', async (req, res) => {
   const { name, file } = req.params
-  const filePath = path.join(PROJECTS_DIR, name, file)
+  const filePath = path.join(getProjectsDir(), name, file)
   try {
     await fs.unlink(filePath)
     res.json({ success: true })
@@ -319,8 +320,8 @@ app.patch('/api/projects/:name/quotations/:file/rename', async (req, res) => {
     new_filename = `${new_filename}.json`
   }
   const safeNewFile = path.basename(new_filename)
-  const oldPath = path.join(PROJECTS_DIR, name, file)
-  const newPath = path.join(PROJECTS_DIR, name, safeNewFile)
+  const oldPath = path.join(getProjectsDir(), name, file)
+  const newPath = path.join(getProjectsDir(), name, safeNewFile)
 
   try {
     if (!fsSync.existsSync(oldPath)) {
@@ -346,7 +347,7 @@ app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
   }
 
   // 获取项目配置中 ocr_columns
-  const settingsPath = path.join(PROJECTS_DIR, name, 'settings.json')
+  const settingsPath = path.join(getProjectsDir(), name, 'settings.json')
   let ocrColumns = ['项目名称', '单位', '数量', '不含税单价', '说明']
   if (fsSync.existsSync(settingsPath)) {
     try {
@@ -460,7 +461,7 @@ app.delete('/api/tasks/:task_id', (req, res) => {
 // ===== 协议定价表 API (Rate Cards) =====
 app.get('/api/ratecards', async (req, res) => {
   try {
-    const files = await fs.readdir(RATECARD_DIR)
+    const files = await fs.readdir(getRatecardDir())
     const ratecardNames = files.filter(f => f.endsWith('.json')).map(f => f.replace('.json', ''))
     res.json(ratecardNames)
   } catch {
@@ -470,7 +471,7 @@ app.get('/api/ratecards', async (req, res) => {
 
 app.post('/api/ratecards/:name', async (req, res) => {
   const { name } = req.params
-  const filePath = path.join(RATECARD_DIR, `${name}.json`)
+  const filePath = path.join(getRatecardDir(), `${name}.json`)
   try {
     const payload = { columns: PRESET_COLUMNS, items: [] }
     await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf-8')
@@ -482,7 +483,7 @@ app.post('/api/ratecards/:name', async (req, res) => {
 
 app.get('/api/ratecards/:name', async (req, res) => {
   const { name } = req.params
-  const filePath = path.join(RATECARD_DIR, `${name}.json`)
+  const filePath = path.join(getRatecardDir(), `${name}.json`)
   try {
     const content = await fs.readFile(filePath, 'utf-8')
     res.json(JSON.parse(content))
@@ -498,8 +499,8 @@ app.patch('/api/ratecards/:name/rename', async (req, res) => {
     return res.status(400).json({ detail: '新定价表名称不能为空' })
   }
   new_name = new_name.trim().replace(/\.json$/, '')
-  const oldPath = path.join(RATECARD_DIR, `${name}.json`)
-  const newPath = path.join(RATECARD_DIR, `${new_name}.json`)
+  const oldPath = path.join(getRatecardDir(), `${name}.json`)
+  const newPath = path.join(getRatecardDir(), `${new_name}.json`)
 
   try {
     if (!fsSync.existsSync(oldPath)) {
@@ -512,10 +513,10 @@ app.patch('/api/ratecards/:name/rename', async (req, res) => {
 
     // 自动更新所有项目 settings.json 中引用的 ratecard_name
     try {
-      const projEntries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true })
+      const projEntries = await fs.readdir(getProjectsDir(), { withFileTypes: true })
       for (const entry of projEntries) {
         if (entry.isDirectory()) {
-          const sPath = path.join(PROJECTS_DIR, entry.name, 'settings.json')
+          const sPath = path.join(getProjectsDir(), entry.name, 'settings.json')
           if (fsSync.existsSync(sPath)) {
             const sContent = await fs.readFile(sPath, 'utf-8')
             const projSettings = JSON.parse(sContent)
@@ -540,7 +541,7 @@ app.patch('/api/ratecards/:name/rename', async (req, res) => {
 app.delete('/api/ratecards/:name', async (req, res) => {
   const { name } = req.params
   const cleanName = name.replace(/\.json$/, '')
-  const filePath = path.join(RATECARD_DIR, `${cleanName}.json`)
+  const filePath = path.join(getRatecardDir(), `${cleanName}.json`)
   try {
     if (fsSync.existsSync(filePath)) {
       await fs.unlink(filePath)
@@ -679,7 +680,7 @@ app.post('/api/ratecards/:name/import', async (req, res) => {
       }
     }
 
-    const filePath = path.join(RATECARD_DIR, `${name}.json`)
+    const filePath = path.join(getRatecardDir(), `${name}.json`)
     const payload = {
       columns: targetColumns,
       items: mappedItems,
@@ -702,7 +703,7 @@ app.post('/api/match', async (req, res) => {
   }
 
   const normalizedFileName = ratecard_name.endsWith('.json') ? ratecard_name : `${ratecard_name}.json`
-  const filePath = path.join(RATECARD_DIR, normalizedFileName)
+  const filePath = path.join(getRatecardDir(), normalizedFileName)
 
   let ratecardItems: Record<string, string>[] = []
   if (fsSync.existsSync(filePath)) {
@@ -756,7 +757,7 @@ app.post('/api/match', async (req, res) => {
 // ===== 模板 API =====
 app.get('/api/templates', async (req, res) => {
   try {
-    const files = await fs.readdir(TEMPLATE_DIR)
+    const files = await fs.readdir(getTemplateDir())
     res.json(files.filter(f => f.endsWith('.xlsx')))
   } catch {
     res.json([])
@@ -768,7 +769,7 @@ app.post('/api/templates', upload.single('file'), async (req, res) => {
   if (!file) return res.status(400).json({ detail: '请上传模板文件' })
   const filename = file.originalname
   try {
-    await fs.writeFile(path.join(TEMPLATE_DIR, filename), file.buffer)
+    await fs.writeFile(path.join(getTemplateDir(), filename), file.buffer)
     res.json({ success: true, filename })
   } catch (err: any) {
     res.status(500).json({ detail: err.message })
@@ -778,17 +779,34 @@ app.post('/api/templates', upload.single('file'), async (req, res) => {
 app.delete('/api/templates/:filename', async (req, res) => {
   const { filename } = req.params
   try {
-    await fs.unlink(path.join(TEMPLATE_DIR, filename))
+    await fs.unlink(path.join(getTemplateDir(), filename))
     res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ detail: err.message })
   }
 })
 
-// 托管包内打包好的前端网页静态产物
-const clientDistPath = fsSync.existsSync(path.join(process.cwd(), 'dist', 'client'))
-  ? path.join(process.cwd(), 'dist', 'client')
-  : path.join(__dirname, '..', 'client')
+// 智能定位托管的前端网页静态产物（兼容 EXE 运行、CWD 变动及 CLI 模式）
+function findClientDistPath(): string {
+  const exeDir = path.dirname(process.execPath)
+  const candidates = [
+    path.join(exeDir, 'client'),
+    path.join(exeDir, 'dist', 'client'),
+    path.join(process.cwd(), 'dist', 'client'),
+    path.join(process.cwd(), 'client'),
+    path.join(__dirname, '..', 'client'),
+    path.join(__dirname, 'client')
+  ]
+
+  for (const candidate of candidates) {
+    if (fsSync.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate
+    }
+  }
+  return path.join(process.cwd(), 'dist', 'client')
+}
+
+const clientDistPath = findClientDistPath()
 
 if (fsSync.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath))
@@ -805,21 +823,51 @@ app.get('*', (req, res, next) => {
   }
 })
 
+export function startServerInstance(desiredPort?: number): Promise<{ port: number; url: string; server: any }> {
+  return new Promise(async (resolve, reject) => {
+    // 动态初始化数据目录结构
+    await initDirs()
+    // 未指定端口时默认设为 0 (由系统自动分配未占用的随机可用端口)
+    const targetPort = desiredPort ?? (process.env.PORT ? Number(process.env.PORT) : 0)
+
+    const listenOnPort = (port: number) => {
+      const server = app.listen(port, async () => {
+        const address = server.address()
+        const actualPort = typeof address === 'object' && address ? address.port : port
+        const url = `http://localhost:${actualPort}`
+        console.log(`CarrotMRO 全栈服务已在端口 ${actualPort} 成功启动: ${url}`)
+
+        if (process.argv.includes('--open')) {
+          try {
+            await open(url)
+            console.log(`已在默认浏览器打开: ${url}`)
+          } catch (err) {
+            console.error('无法自动打开浏览器:', err)
+          }
+        }
+
+        resolve({ port: actualPort, url, server })
+      })
+
+      server.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE' && targetPort !== 0) {
+          console.warn(`⚠️ 端口 ${port} 已被占用，自动尝试递增端口 ${port + 1}...`)
+          listenOnPort(port + 1)
+        } else {
+          reject(err)
+        }
+      })
+    }
+
+    listenOnPort(targetPort)
+  })
+}
+
 export { app }
 
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, async () => {
-    const url = `http://localhost:${PORT}`
-    console.log(`CarrotMRO 全栈服务已启动: ${url}`)
-    
-    if (process.argv.includes('--open')) {
-      try {
-        await open(url)
-        console.log(`已在默认浏览器打开: ${url}`)
-      } catch (err) {
-        console.error('无法自动打开浏览器:', err)
-      }
-    }
+if (process.env.NODE_ENV !== 'test' && !process.env.CARROTMRO_MANUAL_START) {
+  startServerInstance(process.env.PORT ? Number(process.env.PORT) : 3000).catch((err) => {
+    console.error('CarrotMRO 启动失败:', err)
   })
 }
 

@@ -50,8 +50,22 @@ bun install   # 或 npm install
 # 2. 启动开发服务（后端 API 与前端热重载）
 bun run dev
 
-# 3. 运行生产构建并自动打开浏览器
+# 3. 运行 Electron 桌面界面开发调试
+bun run dev:electron
+
+# 4. 运行生产构建并自动打开浏览器
 bun run start
+```
+
+### 📦 打包与发布
+
+```bash
+# 1. 打包 Windows 独立单文件桌面程序 (.exe)
+bun run package:exe
+# 构建产物位于 release/CarrotMRO-Portable-2.0.0.exe
+
+# 2. 发布到 NPM
+npm publish
 ```
 
 ## 📁 目录结构
