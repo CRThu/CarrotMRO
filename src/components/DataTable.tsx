@@ -36,6 +36,9 @@ export interface DataTableProps {
 // 数字类常用标准字段（自动应用右对齐与 monospace 字体）
 const NUMERIC_COLUMNS = ['数量', '不含税单价', '不含税总价', '税率', '含税单价', '含税总价'];
 
+// 默认公式计算与推导结果字段（单一主数据源导出，设置只读 readOnly，物理锁定防止敲入）
+const COMPUTED_COLUMNS = ['含税单价', '不含税总价', '含税总价'];
+
 // 默认列宽表预设
 const DEFAULT_WIDTHS: Record<string, number> = {
   '匹配': 46,
@@ -60,9 +63,21 @@ const renderCellContent = (
 ) => {
   const colName = typeof col === 'string' ? col : col.name;
   const value = item[colName] ?? '';
+  const isComputed = COMPUTED_COLUMNS.includes(colName) || (typeof col !== 'string' && col.computed);
 
-  if (typeof col !== 'string' && col.computed) {
-    return <span className="text-sm font-medium text-gray-700 px-2 py-1 block">{value || '-'}</span>;
+  if (isComputed) {
+    return (
+      <input
+        type="text"
+        readOnly
+        tabIndex={-1}
+        value={value}
+        title={`${colName} - 自动公式计算得出（只读锁定）`}
+        className={`w-full h-9 px-2 py-1 text-sm bg-slate-100/80 border border-transparent text-slate-600 font-semibold cursor-not-allowed select-none transition-all outline-none ${
+          NUMERIC_COLUMNS.includes(colName) ? 'text-right font-mono' : 'text-left font-sans'
+        }`}
+      />
+    );
   }
 
   if (typeof col !== 'string' && col.cellRenderer === 'select' && col.options) {

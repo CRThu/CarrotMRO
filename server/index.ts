@@ -392,46 +392,74 @@ app.post('/api/projects/:name/quotations/:file/export', async (req, res) => {
     const tableHeader = ['序号', ...quotationColumns]
     aoa.push(tableHeader)
 
-    // 数据行 & 汇总计算变量
-    let sumExcludeTaxTotal = 0
-    let sumIncludeTaxTotal = 0
-    let hasExcludeTaxTotalCol = false
-    let hasIncludeTaxTotalCol = false
+    // 列索引映射到 Excel 列字母 (0 -> A, 1 -> B, ...)
+    const getColLetter = (colIdx: number): string => {
+      let letter = ''
+      let curr = colIdx
+      while (curr >= 0) {
+        const remainder = curr % 26
+        letter = String.fromCharCode(remainder + 65) + letter
+        curr = Math.floor(curr / 26) - 1
+      }
+      return letter
+    }
+
+    const colToLetterMap: Record<string, string> = {}
+    tableHeader.forEach((colName, idx) => {
+      colToLetterMap[colName] = getColLetter(idx)
+    })
+
+    const startRow = 5 // 数据首行 Excel 行号
+    const endRow = startRow + items.length - 1 // 数据末行 Excel 行号
 
     items.forEach((item, index) => {
+      const excelRow = startRow + index
       const row: any[] = [index + 1]
+
       quotationColumns.forEach(col => {
         const val = item[col] ?? ''
-        // 判断并转数值类型以便 Excel 运算
-        if (typeof val === 'number') {
+
+        // 1. 不含税总价：使用 Excel 原生乘法公式 =数量*不含税单价
+        if (col === '不含税总价' && colToLetterMap['数量'] && colToLetterMap['不含税单价']) {
+          const qtyCell = `${colToLetterMap['数量']}${excelRow}`
+          const priceCell = `${colToLetterMap['不含税单价']}${excelRow}`
+          const qtyVal = Number(item['数量']) || 0
+          const priceVal = Number(item['不含税单价']) || 0
+          row.push({ t: 'n', f: `${qtyCell}*${priceCell}`, v: Number((qtyVal * priceVal).toFixed(2)) })
+        }
+        // 2. 含税总价：使用 Excel 原生乘法公式 =数量*含税单价
+        else if (col === '含税总价' && colToLetterMap['数量'] && colToLetterMap['含税单价']) {
+          const qtyCell = `${colToLetterMap['数量']}${excelRow}`
+          const incPriceCell = `${colToLetterMap['含税单价']}${excelRow}`
+          const qtyVal = Number(item['数量']) || 0
+          const incPriceVal = Number(item['含税单价']) || 0
+          row.push({ t: 'n', f: `${qtyCell}*${incPriceCell}`, v: Number((qtyVal * incPriceVal).toFixed(2)) })
+        }
+        // 3. 普通列判断数值类型写入
+        else if (typeof val === 'number') {
           row.push(val)
         } else if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
-          row.push(Number(val))
+          if (col === '税率' && val.includes('%')) {
+            row.push(val)
+          } else {
+            row.push(Number(val))
+          }
         } else {
           row.push(val)
-        }
-
-        // 累加计算小计/合计
-        if (col === '不含税总价') {
-          hasExcludeTaxTotalCol = true
-          sumExcludeTaxTotal += Number(val) || 0
-        }
-        if (col === '含税总价') {
-          hasIncludeTaxTotalCol = true
-          sumIncludeTaxTotal += Number(val) || 0
         }
       })
       aoa.push(row)
     })
 
-    // 底部合计行
+    // 4. 底部合计行：使用 Excel 原生 SUM 公式 =SUM(F5:F10)
     if (items.length > 0) {
       const totalRow: any[] = ['合计']
       quotationColumns.forEach(col => {
-        if (col === '不含税总价' && hasExcludeTaxTotalCol) {
-          totalRow.push(Number(sumExcludeTaxTotal.toFixed(2)))
-        } else if (col === '含税总价' && hasIncludeTaxTotalCol) {
-          totalRow.push(Number(sumIncludeTaxTotal.toFixed(2)))
+        const colLetter = colToLetterMap[col]
+        if ((col === '不含税总价' || col === '含税总价') && colLetter) {
+          let initialSum = 0
+          items.forEach(it => { initialSum += Number(it[col]) || 0 })
+          totalRow.push({ t: 'n', f: `SUM(${colLetter}${startRow}:${colLetter}${endRow})`, v: Number(initialSum.toFixed(2)) })
         } else {
           totalRow.push('')
         }

@@ -35,30 +35,64 @@ interface QuotationWorkspaceProps {
   onQuotationRemarksChange?: (remarks: string[]) => void;
 }
 
-// 帮助函数：自动计算联动价格
-export function calculateRowFormulas(item: Record<string, string>, changedField?: string): Record<string, string> {
+// 帮助函数：自动计算联动价格 (单一主数据源引擎：以不含税单价为绝对主源，全推导含税单价、不含税总价与含税总价)
+export function calculateRowFormulas(
+  item: Record<string, string>,
+  changedField?: string,
+  activeColumns?: string[]
+): Record<string, string> {
   const updated = { ...item };
   const qty = parseFloat(updated['数量'] ?? '');
   const priceExcl = parseFloat(updated['不含税单价'] ?? '');
-  let taxRateStr = updated['税率'] ?? '';
-  let taxRate = parseFloat(taxRateStr);
-  if (taxRateStr.includes('%')) {
-    taxRate = parseFloat(taxRateStr.replace('%', '')) / 100;
-  } else if (taxRate > 1) {
-    taxRate = taxRate / 100;
+
+  let taxRateStr = String(updated['税率'] ?? '').trim();
+  let taxRate: number = NaN;
+  if (taxRateStr !== '') {
+    if (taxRateStr.includes('%')) {
+      taxRate = parseFloat(taxRateStr.replace('%', '')) / 100;
+    } else {
+      const parsed = parseFloat(taxRateStr);
+      if (!isNaN(parsed)) {
+        taxRate = parsed > 1 ? parsed / 100 : parsed;
+      }
+    }
   }
 
-  // 1. 不含税总价
-  if (!isNaN(qty) && !isNaN(priceExcl)) {
-    updated['不含税总价'] = (qty * priceExcl).toFixed(2);
+  const colsSet = activeColumns && activeColumns.length > 0 ? new Set(activeColumns) : null;
+
+  // 1. 不含税总价计算与重置 (数量 × 不含税单价)
+  if (colsSet === null || colsSet.has('不含税总价')) {
+    if (!isNaN(qty) && !isNaN(priceExcl)) {
+      updated['不含税总价'] = (qty * priceExcl).toFixed(2);
+    } else if ((isNaN(qty) || isNaN(priceExcl)) && updated['不含税总价'] !== undefined) {
+      updated['不含税总价'] = '';
+    }
+  } else {
+    delete updated['不含税总价'];
   }
 
-  // 2. 税率存在时联动计算含税单价与含税总价
-  if (!isNaN(priceExcl) && !isNaN(taxRate)) {
-    const priceIncl = priceExcl * (1 + taxRate);
-    updated['含税单价'] = priceIncl.toFixed(2);
-    if (!isNaN(qty)) {
-      updated['含税总价'] = (qty * priceIncl).toFixed(2);
+  // 2. 基于主数据源 (不含税单价) 与 税率 统一推导 含税单价 与 含税总价
+  if (!isNaN(priceExcl) && !isNaN(taxRate) && taxRate >= 0) {
+    const calcIncl = priceExcl * (1 + taxRate);
+    if (colsSet === null || colsSet.has('含税单价')) {
+      updated['含税单价'] = calcIncl.toFixed(2);
+    }
+    if (colsSet === null || colsSet.has('含税总价')) {
+      if (!isNaN(qty)) {
+        updated['含税总价'] = (qty * calcIncl).toFixed(2);
+      } else if (updated['含税总价'] !== undefined) {
+        updated['含税总价'] = '';
+      }
+    }
+  } else {
+    // 无有效税率时，若原本填有含税单价则按既有含税单价直接计算含税总价
+    const directInclPrice = parseFloat(updated['含税单价'] ?? '');
+    if (colsSet === null || colsSet.has('含税总价')) {
+      if (!isNaN(qty) && !isNaN(directInclPrice)) {
+        updated['含税总价'] = (qty * directInclPrice).toFixed(2);
+      } else if ((isNaN(qty) || isNaN(directInclPrice)) && updated['含税总价'] !== undefined) {
+        updated['含税总价'] = '';
+      }
     }
   }
 
@@ -102,6 +136,28 @@ export function QuotationWorkspace({
   // 自动保存状态: 'saved' | 'saving' | 'error'
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 打开/切换报价单文件时，自动扫描并补全缺失的公式计算总价
+  useEffect(() => {
+    if (!quotationItems || quotationItems.length === 0) return;
+
+    let hasCalculatedUpdate = false;
+    const computedItems = quotationItems.map((item) => {
+      const calculated = calculateRowFormulas(item, undefined, columnsToShow);
+      if (
+        (item['数量'] && item['不含税单价'] && !item['不含税总价'] && calculated['不含税总价']) ||
+        (item['数量'] && item['含税单价'] && !item['含税总价'] && calculated['含税总价'])
+      ) {
+        hasCalculatedUpdate = true;
+        return calculated;
+      }
+      return item;
+    });
+
+    if (hasCalculatedUpdate) {
+      onQuotationDataChange?.(computedItems);
+    }
+  }, [activeQuotationFilename, currentProject]);
 
   // 触发保存并更新状态 (含 items 与 remarks)
   const triggerAutoSave = (itemsToSave: QuotationItem[], remarksToSave: string[] = quotationRemarks) => {
@@ -215,7 +271,7 @@ export function QuotationWorkspace({
                 columnsToShow.forEach(col => {
                   item[col] = raw[col] || '';
                 });
-                return calculateRowFormulas(item);
+                return calculateRowFormulas(item, undefined, columnsToShow);
               });
               const combined = [...quotationItems, ...newQuotationItems];
               handleItemsChange(combined, true, combinedRemarks); // OCR 提取完成后立即写盘持久化
@@ -308,7 +364,7 @@ export function QuotationWorkspace({
       }
     });
 
-    const finalItem = calculateRowFormulas(updatedItem);
+    const finalItem = calculateRowFormulas(updatedItem, undefined, columnsToShow);
     const newItems = [...quotationItems];
     newItems[itemIndex] = finalItem;
     handleItemsChange(newItems);
@@ -324,15 +380,48 @@ export function QuotationWorkspace({
     let customCount = 0;
     let modifiedCount = 0;
 
-    quotationItems.forEach((item, idx) => {
+    let isDataChanged = false;
+    const updatedQuotationItems = quotationItems.map((item, idx) => {
       const rowNum = idx + 1;
       const itemName = item['项目名称'] || item['清单名称'] || `第${rowNum}行`;
 
       // 忽略空行
       const hasContent = Object.keys(item).some(k => !k.startsWith('_') && String(item[k] || '').trim() !== '');
-      if (!hasContent) return;
+      if (!hasContent) return item;
 
-      const matchStatus = item._matchStatus || 'pending';
+      let newItem = { ...item };
+      const calculated = calculateRowFormulas(item, undefined, columnsToShow);
+      const qty = parseFloat(item['数量'] || '0');
+      const exPrice = parseFloat(item['不含税单价'] || '0');
+      const exTotal = parseFloat(item['不含税总价'] || '0');
+      const incPrice = parseFloat(item['含税单价'] || '0');
+      const incTotal = parseFloat(item['含税总价'] || '0');
+
+      // 不含税总价算术逻辑校验与自动补全（仅在包含该列且有有效数量单价时）
+      if (columnsToShow.includes('不含税总价') && !isNaN(qty) && !isNaN(exPrice)) {
+        const expectedExTotal = parseFloat((qty * exPrice).toFixed(2));
+        if (item['不含税总价'] === undefined || item['不含税总价'] === '' || item['不含税总价'] === null) {
+          newItem = { ...newItem, '不含税总价': expectedExTotal.toFixed(2) };
+          isDataChanged = true;
+        } else if (!isNaN(exTotal) && Math.abs(exTotal - expectedExTotal) > 0.05) {
+          modifiedCount++;
+          warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ 不含税总价计算偏差：当前为 "${item['不含税总价']}"，公式推导 (${qty} × ${exPrice}) 应为 "${expectedExTotal.toFixed(2)}"`);
+        }
+      }
+
+      // 含税总价算术逻辑校验与自动补全
+      if (columnsToShow.includes('含税总价') && !isNaN(qty) && !isNaN(incPrice)) {
+        const expectedIncTotal = parseFloat((qty * incPrice).toFixed(2));
+        if (item['含税总价'] === undefined || item['含税总价'] === '' || item['含税总价'] === null) {
+          newItem = { ...newItem, '含税总价': expectedIncTotal.toFixed(2) };
+          isDataChanged = true;
+        } else if (!isNaN(incTotal) && Math.abs(incTotal - expectedIncTotal) > 0.05) {
+          modifiedCount++;
+          warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ 含税总价计算偏差：当前为 "${item['含税总价']}"，公式推导 (${qty} × ${incPrice}) 应为 "${expectedIncTotal.toFixed(2)}"`);
+        }
+      }
+
+      const matchStatus = newItem._matchStatus || 'pending';
 
       if (matchStatus === 'pending') {
         unmatchedCount++;
@@ -341,19 +430,19 @@ export function QuotationWorkspace({
         customCount++;
         warnings.push(`第 ${rowNum} 行 [${itemName}] ⚠️ 自定义非标件：已被手动标记为自定义不匹配项目`);
       } else if (matchStatus === 'matched') {
-        const rc = item._matchedRateCardItem;
+        const rc = newItem._matchedRateCardItem;
         if (!rc) {
           unmatchedCount++;
           warnings.push(`第 ${rowNum} 行 [${itemName}] ⚠️ 缺失匹配快照：建议重新搜索选择定价物料`);
-          return;
+          return newItem;
         }
 
         checkCols.forEach(col => {
-          const curVal = String(item[col] || '').trim();
+          const curVal = String(newItem[col] || '').trim();
           const origVal = String(rc[col] || '').trim();
 
           if (col === '项目名称') {
-            const listName = String(item['清单名称'] || '').trim();
+            const listName = String(newItem['清单名称'] || '').trim();
             if (curVal && origVal && curVal !== origVal) {
               modifiedCount++;
               warnings.push(`第 ${rowNum} 行 [${itemName}] ❌ 项目名称误修改：当前为 "${curVal}"，原定价单为 "${origVal}"`);
@@ -367,7 +456,13 @@ export function QuotationWorkspace({
           }
         });
       }
+
+      return newItem;
     });
+
+    if (isDataChanged) {
+      handleItemsChange(updatedQuotationItems);
+    }
 
     const timestampStr = new Date().toLocaleTimeString('zh-CN', { hour12: false });
 
@@ -390,7 +485,7 @@ export function QuotationWorkspace({
   const handleCellChange = (index: number, col: string, val: string) => {
     const current = quotationItems[index] || {};
     const updated = { ...current, [col]: val };
-    const calculated = calculateRowFormulas(updated, col);
+    const calculated = calculateRowFormulas(updated, col, columnsToShow);
     
     const nextItems = [...quotationItems];
     nextItems[index] = calculated;
@@ -451,18 +546,16 @@ export function QuotationWorkspace({
             OCR 导入
           </Button>
 
-          {projectRateCard && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleValidateQuotation}
-              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs"
-              title="一键校验全表已匹配物料的严格校验列是否与协议定价表保持一致"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 mr-1 text-indigo-600" />
-              一键校验
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleValidateQuotation}
+            className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 text-xs"
+            title="一键校验全表数据算术计算正确性及已匹配物料规范"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 mr-1 text-indigo-600" />
+            一键校验
+          </Button>
 
           <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700 text-xs">
             <Download className="h-3.5 w-3.5 mr-1" />

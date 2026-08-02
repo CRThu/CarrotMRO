@@ -248,6 +248,18 @@ describe('Server Express REST API Integration Tests', () => {
       expect(totalRow[0]).toBe('合计')
       expect(totalRow[headerRow.indexOf('不含税总价')]).toBe(5500)
       expect(totalRow[headerRow.indexOf('含税总价')]).toBe(6215)
+
+      // 5. 验证原生 Excel 公式 (原生乘法公式 * 与原生求和公式 SUM)
+      const workbookFormulas = XLSX.read(exportRes.buffer, { type: 'buffer', cellFormula: true })
+      const sheetFormulas = workbookFormulas.Sheets['报价单']
+      const formulaKeys = Object.keys(sheetFormulas).filter(k => !k.startsWith('!') && sheetFormulas[k]?.f)
+
+      expect(formulaKeys.length).toBeGreaterThan(0)
+      const hasMultiplyFormula = formulaKeys.some(k => String(sheetFormulas[k].f).includes('*'))
+      const hasSumFormula = formulaKeys.some(k => String(sheetFormulas[k].f).includes('SUM'))
+
+      expect(hasMultiplyFormula).toBe(true)
+      expect(hasSumFormula).toBe(true)
     })
   })
 })

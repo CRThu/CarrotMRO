@@ -88,10 +88,12 @@ export const PRESET_COLUMNS = [
 - **自动保存机制**:
   - 系统/服务商配置：选择服务商卡片即选即存，参数编辑防抖保存。
   - 报价单编辑：OCR 生成完成自动立即持久化写盘，单元格/行列变动 1.2 秒防抖自动保存，顶部提供实时保存状态栏（`✓ 已自动保存` / `⏱️ 正在保存...`）。
-- **公式自动联动**: 报价单编辑时自动执行公式联动：
-  - `不含税总价` = `数量` × `不含税单价`
-  - `含税单价` = `不含税单价` × (1 + `税率`)
-  - `含税总价` = `数量` × `含税单价`
+- **公式自动联动与单一主数据源原则**:
+  - 系统采用**单一主数据源原则**，以 `不含税单价` 为唯一的核心主数据源推导所有衍生列：
+    - `不含税总价` = `数量` × `不含税单价`
+    - `含税单价` = `不含税单价` × `(1 + 税率)`
+    - `含税总价` = `数量` × `含税单价`
+  - 所有衍生推导列（`含税单价`、`不含税总价`、`含税总价`）在前端 UI 表格中**全部统一设置原生 `readOnly` 物理锁定**，禁止手动直接修改，确保全局单一数据源清晰严谨。
 
 - **项目相关 API**:
   | 方法 | 路径 | 说明 |
@@ -99,13 +101,14 @@ export const PRESET_COLUMNS = [
   | `GET` | `/api/projects` | 获取所有项目名称列表 |
   | `POST` | `/api/projects/{name}` | 创建新项目目录并初始化 `settings.json` |
   | `GET` | `/api/projects/{name}` | 读取项目的 `settings.json` 配置 |
-  | `PATCH` | `/api/projects/{name}/settings` | 更新项目的 `settings.json` 配置 |
+  | `PATCH` | `/api/projects/{name}/settings` | 更新项目的 settings.json 配置 |
   | `POST` | `/api/projects/{name}/ocr` | 上传图片按项目的 `ocr_columns` 提取数据 (支持真实打字流) |
   | `GET` | `/api/projects/{name}/quotations` | 获取项目下的报价单列表 |
   | `POST` | `/api/projects/{name}/quotations` | 创建新报价单（quotation-{n}.json） |
   | `GET` | `/api/projects/{name}/quotations/{file}` | 读取指定报价单数据 |
   | `PUT` | `/api/projects/{name}/quotations/{file}` | 保存报价单数据 |
   | `DELETE` | `/api/projects/{name}/quotations/{file}` | 删除报价单 |
+  | `POST` | `/api/projects/{name}/quotations/{file}/export` | 导出报价单为标准 Excel (.xlsx) |
 
 ### 2. 协议定价表管理
 - **功能**: 管理协议定价表。上传 Excel/CSV 时先解析表头提供映射弹窗，系统仅对 100% 精确同名的列自动预先勾选，非同名的原始列保持留空由用户手动下拉指定，确认后将数据清洗归一化并持久化到 JSON。

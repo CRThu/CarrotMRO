@@ -69,4 +69,18 @@ describe('DataTable', () => {
     screen.getByText('新增数据行').click()
     expect(onAddRow).toHaveBeenCalled()
   })
+
+  it('renders computed & derived columns (含税单价, 不含税总价, 含税总价) with readOnly attribute', () => {
+    const computedColumns = ['项目名称', '数量', '不含税单价', '含税单价', '不含税总价', '含税总价']
+    const testItems = [{ '项目名称': '角钢', '数量': '10', '不含税单价': '50.00', '含税单价': '56.50', '不含税总价': '500.00', '含税总价': '565.00' }]
+    render(<DataTable columns={computedColumns} items={testItems} onEdit={vi.fn()} />)
+    
+    const incPriceInput = screen.getByDisplayValue('56.50') as HTMLInputElement
+    const exTotalInput = screen.getByDisplayValue('500.00') as HTMLInputElement
+    const incTotalInput = screen.getByDisplayValue('565.00') as HTMLInputElement
+
+    expect(incPriceInput.readOnly).toBe(true)
+    expect(exTotalInput.readOnly).toBe(true)
+    expect(incTotalInput.readOnly).toBe(true)
+  })
 })
