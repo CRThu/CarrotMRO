@@ -39,12 +39,4 @@ jobs:
         run: bun run build
 
       - name: Publish to NPM
-        run: |
-          if [ -n "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "使用 NPM_TOKEN 凭证发布..."
-            npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
-            npm publish --access public
-          else
-            echo "使用 GitHub OIDC 免密凭据发布..."
-            npm publish --provenance --access public
-          fi
+        run: npm publish --provenance --access public
