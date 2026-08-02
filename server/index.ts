@@ -20,6 +20,12 @@ const upload = multer({ storage: multer.memoryStorage() })
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 
+// 自动幂等保证基础数据目录(data/projects, data/ratecard, data/template)已建立
+app.use(async (req, res, next) => {
+  await initDirs()
+  next()
+})
+
 // 内存中的任务状态缓存
 const tasks: Record<
   string,

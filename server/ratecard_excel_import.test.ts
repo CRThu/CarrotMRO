@@ -69,6 +69,7 @@ describe('协议定价表 Excel 导入端到端测试（组名合并单元格解
 
   beforeAll(async () => {
     await fs.mkdir(testDir, { recursive: true });
+    await fs.mkdir(path.dirname(targetJsonPath), { recursive: true });
     
     const worksheet = XLSX.utils.json_to_sheet(sampleExcelData);
     // 配置合并单元格

@@ -3,7 +3,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import path from 'path'
 import express from 'express'
-import { app } from '../../server/index.js'
+import { app, initDirs } from '../../server/index.js'
 
 const TEST_PROJECT_NAME = 'E2E_Full_Lifecycle_Project'
 const TEST_RATECARD_NAME = 'E2E_RateCard'
@@ -33,6 +33,7 @@ async function request(app: express.Express, method: string, urlPath: string, bo
 
 describe('End-to-End (E2E) Business Flow Integration Test', () => {
   beforeAll(async () => {
+    await initDirs()
     const projPath = path.join(PROJECTS_DIR, TEST_PROJECT_NAME)
     const ratecardPath = path.join(RATECARD_DIR, `${TEST_RATECARD_NAME}.json`)
     if (fsSync.existsSync(projPath)) {
