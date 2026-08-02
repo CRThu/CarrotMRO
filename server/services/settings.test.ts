@@ -1,41 +1,43 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { loadSettings, saveSettings } from './settings.js';
+import path from 'path';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import path from 'path';
 
-const SETTINGS_FILE = path.join(process.cwd(), 'data', 'settings.json');
-let originalContent: string | null = null;
+const TEST_SETTINGS_FILE = path.join(process.cwd(), 'data', 'settings.test.json');
 
-describe('Settings Service (data/settings.json)', () => {
+// 强制为测试指定独立的 settings.test.json 路径
+process.env.SETTINGS_FILE_PATH = TEST_SETTINGS_FILE;
+
+import { loadSettings, saveSettings } from './settings.js';
+
+describe('Settings Service (data/settings.test.json 隔离测试)', () => {
   beforeAll(async () => {
-    // 备份用户真实的 settings.json 文件，避免测试执行破坏真实配置
-    if (fsSync.existsSync(SETTINGS_FILE)) {
-      originalContent = await fs.readFile(SETTINGS_FILE, 'utf-8').catch(() => null);
+    // 确保清理旧的测试临时文件
+    if (fsSync.existsSync(TEST_SETTINGS_FILE)) {
+      await fs.unlink(TEST_SETTINGS_FILE).catch(() => {});
     }
   });
 
   afterAll(async () => {
-    // 还原用户真实的 settings.json 文件
-    if (originalContent !== null) {
-      await fs.writeFile(SETTINGS_FILE, originalContent, 'utf-8').catch(() => {});
+    // 测试完成后清理测试文件
+    if (fsSync.existsSync(TEST_SETTINGS_FILE)) {
+      await fs.unlink(TEST_SETTINGS_FILE).catch(() => {});
     }
   });
 
   beforeEach(async () => {
-    // 测试前临时清理
-    if (fsSync.existsSync(SETTINGS_FILE)) {
-      await fs.unlink(SETTINGS_FILE).catch(() => {});
+    if (fsSync.existsSync(TEST_SETTINGS_FILE)) {
+      await fs.unlink(TEST_SETTINGS_FILE).catch(() => {});
     }
   });
 
-  it('应该能自动加载默认配置并创建 data/settings.json 文件', async () => {
+  it('应该能自动加载默认配置并创建 data/settings.test.json 文件', async () => {
     const settings = await loadSettings();
     expect(settings).toBeDefined();
     expect(settings.llm).toBeDefined();
     expect(settings.llm.activeProvider).toBe('google');
     expect(settings.llm.providers.google.model).toBe('gemini-3.6-flash');
-    expect(fsSync.existsSync(SETTINGS_FILE)).toBe(true);
+    expect(fsSync.existsSync(TEST_SETTINGS_FILE)).toBe(true);
   });
 
   it('应该能够成功保存多 Provider 独立 Key 配置并持久化', async () => {
@@ -57,12 +59,12 @@ describe('Settings Service (data/settings.json)', () => {
     expect(updated.llm.providers.deepseek.apiKey).toBe('deepseek-key-222');
 
     // 重新读取磁盘文件，验证持久化正确性
-    const diskContent = JSON.parse(await fs.readFile(SETTINGS_FILE, 'utf-8'));
+    const diskContent = JSON.parse(await fs.readFile(TEST_SETTINGS_FILE, 'utf-8'));
     expect(diskContent.llm.activeProvider).toBe('deepseek');
     expect(diskContent.llm.providers.deepseek.apiKey).toBe('deepseek-key-222');
   });
 
-  it('在内存/进程启动时应该能自动从多 Provider settings.json 完整恢复配置', async () => {
+  it('在内存/进程启动时应该能自动从多 Provider settings.test.json 完整恢复配置', async () => {
     // 模拟写入既有文件
     const mockSettings = {
       llm: {
@@ -73,8 +75,8 @@ describe('Settings Service (data/settings.json)', () => {
         },
       },
     };
-    await fs.mkdir(path.dirname(SETTINGS_FILE), { recursive: true });
-    await fs.writeFile(SETTINGS_FILE, JSON.stringify(mockSettings), 'utf-8');
+    await fs.mkdir(path.dirname(TEST_SETTINGS_FILE), { recursive: true });
+    await fs.writeFile(TEST_SETTINGS_FILE, JSON.stringify(mockSettings), 'utf-8');
 
     // 加载配置
     const loaded = await loadSettings();
@@ -82,3 +84,4 @@ describe('Settings Service (data/settings.json)', () => {
     expect(loaded.llm.providers.mimo.apiKey).toBe('mimo-key-999');
   });
 });
+

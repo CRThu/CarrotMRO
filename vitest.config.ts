@@ -8,10 +8,24 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts', 'tests/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html', 'json-summary'],
+      include: ['src/**/*.{ts,tsx}', 'server/**/*.ts'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'server/**/*.test.ts',
+        'tests/**/*.test.ts',
+        'src/test/**',
+        'src/main.tsx',
+        'server/index.ts',
+      ],
+    },
 
     alias: {
       '@': path.resolve(__dirname, './src')
     }
   }
 })
+

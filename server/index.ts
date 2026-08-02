@@ -701,7 +701,9 @@ app.post('/api/match', async (req, res) => {
     return res.json(result)
   }
 
-  const filePath = path.join(RATECARD_DIR, `${ratecard_name}.json`)
+  const normalizedFileName = ratecard_name.endsWith('.json') ? ratecard_name : `${ratecard_name}.json`
+  const filePath = path.join(RATECARD_DIR, normalizedFileName)
+
   let ratecardItems: Record<string, string>[] = []
   if (fsSync.existsSync(filePath)) {
     try {
@@ -803,16 +805,21 @@ app.get('*', (req, res, next) => {
   }
 })
 
-app.listen(PORT, async () => {
-  const url = `http://localhost:${PORT}`
-  console.log(`CarrotMRO 全栈服务已启动: ${url}`)
-  
-  if (process.argv.includes('--open')) {
-    try {
-      await open(url)
-      console.log(`已在默认浏览器打开: ${url}`)
-    } catch (err) {
-      console.error('无法自动打开浏览器:', err)
+export { app }
+
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, async () => {
+    const url = `http://localhost:${PORT}`
+    console.log(`CarrotMRO 全栈服务已启动: ${url}`)
+    
+    if (process.argv.includes('--open')) {
+      try {
+        await open(url)
+        console.log(`已在默认浏览器打开: ${url}`)
+      } catch (err) {
+        console.error('无法自动打开浏览器:', err)
+      }
     }
-  }
-})
+  })
+}
+

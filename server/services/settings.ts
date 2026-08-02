@@ -51,7 +51,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+export function getSettingsFilePath(): string {
+  return process.env.SETTINGS_FILE_PATH || path.join(DATA_DIR, 'settings.json');
+}
+
 
 let cachedSettings: AppSettings | null = null;
 
@@ -78,12 +81,12 @@ function parseSettings(parsed: any): AppSettings {
 export async function loadSettings(): Promise<AppSettings> {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-    if (fsSync.existsSync(SETTINGS_FILE)) {
-      const content = await fs.readFile(SETTINGS_FILE, 'utf-8');
+    if (fsSync.existsSync(getSettingsFilePath())) {
+      const content = await fs.readFile(getSettingsFilePath(), 'utf-8');
       cachedSettings = parseSettings(JSON.parse(content));
     } else {
       cachedSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-      await fs.writeFile(SETTINGS_FILE, JSON.stringify(cachedSettings, null, 2), 'utf-8');
+      await fs.writeFile(getSettingsFilePath(), JSON.stringify(cachedSettings, null, 2), 'utf-8');
     }
   } catch (err) {
     console.error('加载 settings.json 失败，使用默认配置:', err);
@@ -98,8 +101,8 @@ export async function loadSettings(): Promise<AppSettings> {
 export function getSettings(): AppSettings {
   if (!cachedSettings) {
     try {
-      if (fsSync.existsSync(SETTINGS_FILE)) {
-        const content = fsSync.readFileSync(SETTINGS_FILE, 'utf-8');
+      if (fsSync.existsSync(getSettingsFilePath())) {
+        const content = fsSync.readFileSync(getSettingsFilePath(), 'utf-8');
         cachedSettings = parseSettings(JSON.parse(content));
       } else {
         cachedSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
@@ -143,7 +146,7 @@ export async function saveSettings(newSettings: Partial<AppSettings>): Promise<A
   };
 
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+  await fs.writeFile(getSettingsFilePath(), JSON.stringify(updated, null, 2), 'utf-8');
   cachedSettings = updated;
   return updated;
 }
