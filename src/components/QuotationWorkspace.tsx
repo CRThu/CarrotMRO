@@ -257,8 +257,9 @@ export function QuotationWorkspace({
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch {
-      alert('导出失败，请先关联有效的 Excel 模板');
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || '导出失败';
+      alert(`报价单导出失败: ${msg}`);
     }
   };
 
@@ -463,12 +464,10 @@ export function QuotationWorkspace({
             </Button>
           )}
 
-          {projectTemplate && (
-            <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700 text-xs">
-              <Download className="h-3.5 w-3.5 mr-1" />
-              导出
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={handleExport} className="text-gray-700 text-xs">
+            <Download className="h-3.5 w-3.5 mr-1" />
+            导出
+          </Button>
         </div>
       </div>
 

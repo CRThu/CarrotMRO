@@ -343,6 +343,127 @@ app.patch('/api/projects/:name/quotations/:file/rename', async (req, res) => {
   }
 })
 
+// ===== 报价单标准 Excel 导出 API =====
+app.post('/api/projects/:name/quotations/:file/export', async (req, res) => {
+  const { name, file } = req.params
+  const projectDir = path.join(getProjectsDir(), name)
+  const quotationPath = path.join(projectDir, file)
+
+  if (!fsSync.existsSync(quotationPath)) {
+    return res.status(404).json({ detail: '报价单文件不存在' })
+  }
+
+  try {
+    // 1. 读取项目配置（获取 quotation_columns）
+    const settingsPath = path.join(projectDir, 'settings.json')
+    let quotationColumns: string[] = []
+    if (fsSync.existsSync(settingsPath)) {
+      const settingsContent = await fs.readFile(settingsPath, 'utf-8')
+      const settings = JSON.parse(settingsContent)
+      if (Array.isArray(settings.quotation_columns) && settings.quotation_columns.length > 0) {
+        quotationColumns = settings.quotation_columns
+      }
+    }
+
+    // 若项目未配置 quotation_columns，默认使用全局 10 项标准预制列
+    if (quotationColumns.length === 0) {
+      quotationColumns = [...PRESET_COLUMNS]
+    }
+
+    // 2. 读取报价单数据
+    const quotationContent = await fs.readFile(quotationPath, 'utf-8')
+    const quotationData = JSON.parse(quotationContent)
+    const items: Record<string, any>[] = Array.isArray(quotationData.items) ? quotationData.items : []
+
+    // 3. 构建二维表格数据数组 (AOA: Array of Arrays)
+    const aoa: any[][] = []
+
+    // 大标题行
+    aoa.push(['报价单'])
+
+    // 基本信息行
+    const exportDate = new Date().toISOString().split('T')[0]
+    aoa.push([`项目名称: ${name}`, '', '', `报价单: ${file.replace('.json', '')}`, '', `导出日期: ${exportDate}`])
+
+    // 空行隔开
+    aoa.push([])
+
+    // 表头行 (序号 + quotation_columns)
+    const tableHeader = ['序号', ...quotationColumns]
+    aoa.push(tableHeader)
+
+    // 数据行 & 汇总计算变量
+    let sumExcludeTaxTotal = 0
+    let sumIncludeTaxTotal = 0
+    let hasExcludeTaxTotalCol = false
+    let hasIncludeTaxTotalCol = false
+
+    items.forEach((item, index) => {
+      const row: any[] = [index + 1]
+      quotationColumns.forEach(col => {
+        const val = item[col] ?? ''
+        // 判断并转数值类型以便 Excel 运算
+        if (typeof val === 'number') {
+          row.push(val)
+        } else if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+          row.push(Number(val))
+        } else {
+          row.push(val)
+        }
+
+        // 累加计算小计/合计
+        if (col === '不含税总价') {
+          hasExcludeTaxTotalCol = true
+          sumExcludeTaxTotal += Number(val) || 0
+        }
+        if (col === '含税总价') {
+          hasIncludeTaxTotalCol = true
+          sumIncludeTaxTotal += Number(val) || 0
+        }
+      })
+      aoa.push(row)
+    })
+
+    // 底部合计行
+    if (items.length > 0) {
+      const totalRow: any[] = ['合计']
+      quotationColumns.forEach(col => {
+        if (col === '不含税总价' && hasExcludeTaxTotalCol) {
+          totalRow.push(Number(sumExcludeTaxTotal.toFixed(2)))
+        } else if (col === '含税总价' && hasIncludeTaxTotalCol) {
+          totalRow.push(Number(sumIncludeTaxTotal.toFixed(2)))
+        } else {
+          totalRow.push('')
+        }
+      })
+      aoa.push(totalRow)
+    }
+
+    // 4. 使用 XLSX 生成 Workbook & Worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa)
+
+    // 设置基本列宽自适应
+    const colWidths = tableHeader.map(colName => {
+      const minWidth = Math.max(String(colName).length * 2 + 4, 12)
+      return { wch: minWidth }
+    })
+    worksheet['!cols'] = colWidths
+
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, '报价单')
+
+    // 5. 导出 Buffer 并返回 HTTP 响应
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    const exportFilename = `${file.replace('.json', '')}.xlsx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(exportFilename)}"`)
+    res.send(buffer)
+  } catch (err: any) {
+    res.status(500).json({ detail: `导出失败: ${err.message}` })
+  }
+})
+
 // ===== OCR 多图图片异步识别与流式日志通知 API =====
 app.post('/api/projects/:name/ocr', upload.array('files'), async (req, res) => {
   const { name } = req.params

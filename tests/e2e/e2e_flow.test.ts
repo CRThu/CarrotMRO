@@ -3,6 +3,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import path from 'path'
 import express from 'express'
+import * as XLSX from 'xlsx'
 import { app, initDirs } from '../../server/index.js'
 
 const TEST_PROJECT_NAME = 'E2E_Full_Lifecycle_Project'
@@ -24,6 +25,29 @@ async function request(app: express.Express, method: string, urlPath: string, bo
         const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, options)
         const json = await res.json().catch(() => ({}))
         server.close(() => resolve({ status: res.status, body: json }))
+      } catch (err) {
+        server.close(() => reject(err))
+      }
+    })
+  })
+}
+
+async function requestBuffer(app: express.Express, method: string, urlPath: string, body?: any) {
+  return new Promise<{ status: number; buffer: Buffer; contentType: string }>((resolve, reject) => {
+    const server = app.listen(0, '127.0.0.1', async () => {
+      const address = server.address() as any
+      const port = address.port
+      try {
+        const options: RequestInit = {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+        }
+        if (body) options.body = JSON.stringify(body)
+        const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, options)
+        const arrayBuf = await res.arrayBuffer()
+        const buffer = Buffer.from(arrayBuf)
+        const contentType = res.headers.get('content-type') || ''
+        server.close(() => resolve({ status: res.status, buffer, contentType }))
       } catch (err) {
         server.close(() => reject(err))
       }
@@ -146,5 +170,36 @@ describe('End-to-End (E2E) Business Flow Integration Test', () => {
     expect(verifyRes.body.items[0].不含税总价).toBe(38000)
     expect(verifyRes.body.items[0].含税总价).toBe(42940)
     expect(verifyRes.body.remarks[0]).toContain('全自动匹配')
+
+    // 步骤 9: 导出为标准 Excel 文件并反向解析断言
+    const exportRes = await requestBuffer(app, 'POST', `/api/projects/${TEST_PROJECT_NAME}/quotations/${quotationFile}/export`)
+    expect(exportRes.status).toBe(200)
+    expect(exportRes.contentType).toContain('spreadsheetml.sheet')
+
+    const workbook = XLSX.read(exportRes.buffer, { type: 'buffer' })
+    expect(workbook.SheetNames).toContain('报价单')
+
+    const sheet = workbook.Sheets['报价单']
+    const sheetData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+
+    // 验证标题与信息
+    expect(sheetData[0][0]).toBe('报价单')
+    expect(sheetData[1][0]).toContain(`项目名称: ${TEST_PROJECT_NAME}`)
+
+    // 验证表头与物料数据
+    const headerRow = sheetData[3]
+    expect(headerRow).toContain('项目名称')
+    expect(headerRow).toContain('不含税总价')
+    expect(headerRow).toContain('含税总价')
+
+    expect(sheetData[4][headerRow.indexOf('项目名称')]).toBe('HRB400螺纹钢')
+    expect(sheetData[4][headerRow.indexOf('不含税总价')]).toBe(38000)
+    expect(sheetData[4][headerRow.indexOf('含税总价')]).toBe(42940)
+
+    // 验证合计
+    const totalRow = sheetData[5]
+    expect(totalRow[0]).toBe('合计')
+    expect(totalRow[headerRow.indexOf('不含税总价')]).toBe(38000)
+    expect(totalRow[headerRow.indexOf('含税总价')]).toBe(42940)
   })
 })

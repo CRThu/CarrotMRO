@@ -3,6 +3,7 @@ import fs from 'fs/promises'
 import fsSync from 'fs'
 import path from 'path'
 import express from 'express'
+import * as XLSX from 'xlsx'
 
 const TEST_PROJECT_NAME = 'integration-test-project'
 const TEST_RATECARD_NAME = 'integration-test-ratecard'
@@ -25,6 +26,29 @@ async function request(app: express.Express, method: string, urlPath: string, bo
         const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, options)
         const json = await res.json().catch(() => ({}))
         server.close(() => resolve({ status: res.status, body: json }))
+      } catch (err) {
+        server.close(() => reject(err))
+      }
+    })
+  })
+}
+
+async function requestBuffer(app: express.Express, method: string, urlPath: string, body?: any) {
+  return new Promise<{ status: number; buffer: Buffer; contentType: string }>((resolve, reject) => {
+    const server = app.listen(0, '127.0.0.1', async () => {
+      const address = server.address() as any
+      const port = address.port
+      try {
+        const options: RequestInit = {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+        }
+        if (body) options.body = JSON.stringify(body)
+        const res = await fetch(`http://127.0.0.1:${port}${urlPath}`, options)
+        const arrayBuf = await res.arrayBuffer()
+        const buffer = Buffer.from(arrayBuf)
+        const contentType = res.headers.get('content-type') || ''
+        server.close(() => resolve({ status: res.status, buffer, contentType }))
       } catch (err) {
         server.close(() => reject(err))
       }
@@ -172,6 +196,58 @@ describe('Server Express REST API Integration Tests', () => {
       expect(Array.isArray(res.body['PVC穿线管'])).toBe(true)
       expect(res.body['PVC穿线管'].length).toBeGreaterThanOrEqual(1)
       expect(res.body['PVC穿线管'][0][2]['项目名称']).toBe('PVC穿线管')
+    })
+
+    it('POST /api/projects/:name/quotations/:file/export 应正确导出标准 Excel 并支持反向解析验证', async () => {
+      // 准备报价单模拟数据
+      const quotationFile = 'quotation-1.json'
+      const quotationPath = path.join(PROJECTS_DIR, TEST_PROJECT_NAME, quotationFile)
+      const mockQuotationData = {
+        columns: ['项目组', '项目名称', '单位', '数量', '不含税单价', '不含税总价', '含税单价', '含税总价', '说明'],
+        items: [
+          { 项目组: '电工组', 项目名称: '铜芯电缆', 单位: '米', 数量: '100', 不含税单价: '45.00', 不含税总价: '4500.00', 税率: '0.13', 含税单价: '50.85', 含税总价: '5085.00', 说明: '国标' },
+          { 项目组: '水暖组', 项目名称: 'PPR水管', 单位: '根', 数量: '50', 不含税单价: '20.00', 不含税总价: '1000.00', 税率: '0.13', 含税单价: '22.60', 含税总价: '1130.00', 说明: '20mm' }
+        ]
+      }
+      await fs.writeFile(quotationPath, JSON.stringify(mockQuotationData, null, 2), 'utf-8')
+
+      // 调用导出 API
+      const exportRes = await requestBuffer(app, 'POST', `/api/projects/${TEST_PROJECT_NAME}/quotations/${quotationFile}/export`)
+      expect(exportRes.status).toBe(200)
+      expect(exportRes.contentType).toContain('spreadsheetml.sheet')
+
+      // 反向解析导出的 Excel 字节流
+      const workbook = XLSX.read(exportRes.buffer, { type: 'buffer' })
+      expect(workbook.SheetNames).toContain('报价单')
+
+      const sheet = workbook.Sheets['报价单']
+      const sheetData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+
+      // 1. 验证大标题
+      expect(sheetData[0][0]).toBe('报价单')
+      expect(sheetData[1][0]).toContain(`项目名称: ${TEST_PROJECT_NAME}`)
+
+      // 2. 验证表头列 (第4行, index=3)
+      const headerRow = sheetData[3]
+      expect(headerRow[0]).toBe('序号')
+      expect(headerRow).toContain('项目名称')
+      expect(headerRow).toContain('不含税总价')
+      expect(headerRow).toContain('含税总价')
+
+      // 3. 验证数据明细行
+      expect(sheetData[4][0]).toBe(1)
+      expect(sheetData[4][headerRow.indexOf('项目名称')]).toBe('铜芯电缆')
+      expect(sheetData[4][headerRow.indexOf('不含税总价')]).toBe(4500)
+
+      expect(sheetData[5][0]).toBe(2)
+      expect(sheetData[5][headerRow.indexOf('项目名称')]).toBe('PPR水管')
+      expect(sheetData[5][headerRow.indexOf('不含税总价')]).toBe(1000)
+
+      // 4. 验证合计汇总行
+      const totalRow = sheetData[6]
+      expect(totalRow[0]).toBe('合计')
+      expect(totalRow[headerRow.indexOf('不含税总价')]).toBe(5500)
+      expect(totalRow[headerRow.indexOf('含税总价')]).toBe(6215)
     })
   })
 })
