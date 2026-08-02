@@ -30,43 +30,68 @@
 - **UI 组件库**: shadcn/ui（base-nova 风格）
 - **包管理 & 运行驱动**: Bun / npm
 
-## 🚀 快速开始
+## 📥 安装与使用方式
 
 ### 环境要求
+- Node.js 18+ 或 Bun 1.1+ (推荐 Node.js v20+)
 
-- Node.js 18+ 或 Bun 1.1+
+---
 
-### 启动运行方式
-
-#### 1. 命令行/NPM 全局随处运行
-可以在任意目录下直接执行命令，自动在当前目录下读写 `./data` 并打开浏览器：
+### 1. NPX 零安装一键随处运行 (推荐)
+无需提前全局安装任何软件包，在终端任意目录下直接执行以下命令，系统会自动创建/读取同级 `./data` 数据目录并自动在默认浏览器中打开系统：
 ```bash
 npx carrotmro
 ```
+> **自定义端口**：如需指定端口，可使用 `--port` 或 `-p` 参数：
+> ```bash
+> npx carrotmro --port 15000
+> ```
 
-#### 2. 本地开发与调试
+---
+
+### 2. 包管理器全局安装 (Global Installation)
+通过 NPM、PNPM 或 Bun 将 `carrotmro` 注册为全局系统命令，即可在终端随时唤起：
+
 ```bash
-# 1. 安装依赖
-bun install   # 或 npm install
+# 使用 npm 全局安装
+npm install -g carrotmro
 
-# 2. 启动开发服务（后端 API 与前端热重载）
-bun run dev
+# 使用 pnpm 全局安装
+pnpm add -g carrotmro
 
-# 3. 运行 Electron 桌面界面开发调试
-bun run dev:electron
+# 使用 bun 全局安装
+bun add -g carrotmro
 
-# 4. 运行生产构建并自动打开浏览器
-bun run start
+# 安装完成后在任意目录下执行：
+carrotmro
 ```
 
-### 📦 打包与发布
+---
+
+### 3. 源码克隆与本地二次开发 (Local Development)
+适用于开发人员扩展新功能、修改算法或自定义 UI 样式：
 
 ```bash
-# 1. 打包 Windows 独立单文件桌面程序 (.exe)
-bun run package:exe
-# 构建产物位于 release/CarrotMRO-Portable-2.0.0.exe
+# 1. 克隆 GitHub 源码仓库
+git clone https://github.com/CRThu/CarrotMRO.git
+cd CarrotMRO
 
-# 2. 发布到 NPM
+# 2. 安装项目依赖
+bun install   # 或 npm install
+
+# 3. 启动开发调试服务 (前端 Vite 热重载 + 后端 API)
+bun run dev   # 或 npm run dev
+
+# 4. 启动 Electron 桌面客户端开发模式
+bun run dev:electron
+
+# 5. 执行全栈生产编译打包
+bun run build # 或 npm run build
+```
+
+### 📦 NPM 发布命令
+
+```bash
 npm publish
 ```
 
